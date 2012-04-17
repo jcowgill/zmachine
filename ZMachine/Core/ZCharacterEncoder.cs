@@ -11,8 +11,13 @@ namespace JCowgill.ZMachine.Core
     public sealed class ZCharacterEncoder
     {
         private readonly MemoryBuffer buf;
+        
         private readonly char[] unicodeCache;
+        private readonly Dictionary<char, byte> reverseUnicodeCache = new Dictionary<char, byte>();
+
         private readonly char[] alphabetCache;
+        private readonly byte[] reverseAlphabetCache = new byte[256];  //Indexes returned are 1 more
+
         private readonly string[] abbreviationCache;
         private readonly int machineVersion;
 
@@ -72,6 +77,17 @@ namespace JCowgill.ZMachine.Core
             //Create unicode cache
             this.unicodeCache = CreateUnicodeCache(unicodeTable);
 
+            //Create reverse cache
+            // Go in reverse so that ASCII takes priority over custom unicode
+            for(int i = 255; i > 0; i--)
+            {
+                //Add character
+                if (unicodeCache[i] != INVALID_CHAR)
+                {
+                    reverseUnicodeCache[unicodeCache[i]] = (byte) i;
+                }
+            }
+
             //Create alphabet cache
             if (machineVersion >= 5 && buf.GetUShort(0x34) != 0)
             {
@@ -81,6 +97,12 @@ namespace JCowgill.ZMachine.Core
             {
                 //Use default alphabet
                 this.alphabetCache = machineVersion == 1 ? DEFAULT_ALPHABET_TABLE_V1 : DEFAULT_ALPHABET_TABLE;
+            }
+
+            //Create reverse alphabet cache
+            for (int i = 0; i < 78; i++)
+            {
+                reverseAlphabetCache[reverseUnicodeCache[alphabetCache[i]]] = (byte) (i + 1);
             }
 
             //Create abbreviation cache
@@ -154,17 +176,16 @@ namespace JCowgill.ZMachine.Core
         private char[] CreateAlphabetCache(int alphabetTable)
         {
             //The alphabet cache is just an array of zscii translations
-            char[] alphabetCache = new char[78];
+            char[] cache = new char[78];
 
             for (int i = 0; i < 78; i++)
             {
-                alphabetCache[i] = unicodeCache[buf.GetByte(alphabetTable + i)];
+                cache[i] = unicodeCache[buf.GetByte(alphabetTable + i)];
             }
 
             //Override Z character A2 7 to be a newline
-            alphabetCache[2 * 26 + 1] = '\n';
-
-            return alphabetCache;
+            cache[2 * 26 + 1] = '\n';
+            return cache;
         }
 
         /// <summary>
@@ -375,6 +396,151 @@ namespace JCowgill.ZMachine.Core
 
             //Return complete string
             return str.ToString();
+        }
+
+        /// <summary>
+        /// Encodes the given input character to ZSCII
+        /// </summary>
+        /// <param name="inChar">input unicode character</param>
+        /// <returns>the encoded ZSCII character</returns>
+        public byte EncodeToZscii(char inChar)
+        {
+            byte zChar;
+
+            //Lookup in cache
+            if (reverseUnicodeCache.TryGetValue(inChar, out zChar))
+            {
+                return zChar;
+            }
+            else
+            {
+                //Invalid character representation
+                return (byte) '?';
+            }
+        }
+
+        /// <summary>
+        /// Encodes the given input character to ZSCII
+        /// </summary>
+        /// <param name="inChar">input character</param>
+        /// <returns>the encoded ZSCII character</returns>
+        public byte EncodeToZscii(ZInputCharacter inChar)
+        {
+            //Special character in use?
+            if (inChar.zsciiChar != 0)
+            {
+                return inChar.zsciiChar;
+            }
+            else
+            {
+                return EncodeToZscii(inChar.unicodeChar);
+            }
+        }
+
+        /// <summary>
+        /// Encodes the given ZSCII WORD into Z characters (eg in alphabets) for dictionary lookup
+        /// </summary>
+        /// <param name="zsciiStr">string of bytes encoded using EncodeToZscii</param>
+        /// <returns>an array containing 4 or 6 bytes (depending on version) of z characters</returns>
+        /// <remarks>
+        /// <para>The array returned is suitible for directly looking up with the dictionary. In particular:</para>
+        /// <list type="bullet">
+        ///     <item>
+        ///         <description>Text is truncated to 6 or 9 Z characters (a word). You must split the string up FIRST.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>All text is converted to lower case</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>The string is padded at the end with 5s</description>
+        ///     </item>
+        /// </list>
+        /// </remarks>
+        public byte[] EncodeForDictionary(byte[] zsciiStr)
+        {
+            //Create base z character array
+            byte[] charArray = new byte[] { 5, 5, 5, 5, 5, 5, 5, 5, 5 };     //9 fives
+            int maxChars = machineVersion >= 4 ? 9 : 6;
+            int zCharPos = 0;
+
+            //Encode characters
+            for (int i = 0; i < zsciiStr.Length && zCharPos < maxChars; i++)
+            {
+				byte zscii = zsciiStr[i];
+			
+                //To lower case
+				if(zscii >= (byte) 'A' && zscii <= (byte) 'Z')
+				{
+					zscii += 'a' - 'A';
+				}
+				
+				//Attempt to convert via alphabet
+				byte zChar = reverseAlphabetCache[zscii];
+				
+				if(zChar != 0)
+				{
+					//Take away 1 to get the alphabet character
+					zChar--;
+					
+					//Which alphabet?
+					if(zChar >= 26)
+					{
+						//A1 or A2
+						// Using 2 chars
+						if(zCharPos + 2 > maxChars)
+						{
+							break;
+						}
+						
+						if(zChar >= 26 * 2)
+						{
+							//A2
+							charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3;
+						}
+						else
+						{
+							//A1
+							charArray[zCharPos++] = machineVersion >= 3 ? (byte) 4 : (byte) 2;
+						}
+					}
+					
+					//Print raw character
+					charArray[zCharPos++] = zChar;
+				}
+				else
+				{
+					//Use raw ZSCII form
+					// Using 4 chars
+					if(zCharPos + 4 > maxChars)
+					{
+						break;
+					}
+					
+					//Print parts of character
+					charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3; //Shift A2
+					charArray[zCharPos++] = (byte) 6;	   //Raw ZSCII request
+					charArray[zCharPos++] = (byte) (zscii >> 5);
+					charArray[zCharPos++] = (byte) (zscii & 0x1F);
+				}
+            }
+			
+			//Re-encode using packed zscii format
+            byte[] packed = new byte[machineVersion >= 4 ? 6 : 4];
+
+            packed[0] = (byte) (charArray[0] << 2 | charArray[1] >> 3);
+            packed[1] = (byte) (charArray[1] << 5 | charArray[2]);
+
+            packed[2] = (byte) (charArray[3] << 2 | charArray[3] >> 3);
+            packed[3] = (byte) (charArray[4] << 5 | charArray[5]);
+
+            if (machineVersion >= 4)
+            {
+                packed[4] = (byte) (charArray[6] << 2 | charArray[7] >> 3);
+                packed[5] = (byte) (charArray[7] << 5 | charArray[8]);
+            }
+            
+            //Return final array
+            return packed;
         }
     }
 }
