@@ -103,6 +103,15 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
+        /// Gets a char from the buffer (16 bit unicode)
+        /// </summary>
+        /// <param name="pos">position to get char from</param>
+        public char GetChar(int pos)
+        {
+            return (char) GetUShort(pos);
+        }
+
+        /// <summary>
         /// Gets an unsigned short from the buffer
         /// </summary>
         /// <param name="pos">position to get unsigned short from</param>
