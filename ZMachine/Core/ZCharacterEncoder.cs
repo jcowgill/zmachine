@@ -46,7 +46,7 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Unicode replacement character - used for illegal ZSCII characters
         /// </summary>
-        public const char INVALID_CHAR = '\uFFFD';
+        public const char InvalidChar = '\uFFFD';
 
         /// <summary>
         /// Creates a new z machine character encoder
@@ -82,7 +82,7 @@ namespace JCowgill.ZMachine.Core
             for(int i = 255; i > 0; i--)
             {
                 //Add character
-                if (unicodeCache[i] != INVALID_CHAR)
+                if (unicodeCache[i] != InvalidChar)
                 {
                     reverseUnicodeCache[unicodeCache[i]] = (byte) i;
                 }
@@ -123,7 +123,7 @@ namespace JCowgill.ZMachine.Core
             char[] cache = new char[256];
             for (int i = 1; i < 0x20; i++)
             {
-                cache[i] = INVALID_CHAR;
+                cache[i] = InvalidChar;
             }
 
             cache[0] = '\0';
@@ -140,7 +140,7 @@ namespace JCowgill.ZMachine.Core
             //Wipe second section
             for (int i = 127; i < 256; i++)
             {
-                cache[i] = INVALID_CHAR;
+                cache[i] = InvalidChar;
             }
 
             //Create custom unicode section
@@ -301,7 +301,7 @@ namespace JCowgill.ZMachine.Core
                             if (zsciiChar < 0 || zsciiChar >= 256)
                             {
                                 //Invalid
-                                str.Append(INVALID_CHAR);
+                                str.Append(InvalidChar);
                             }
                             else
                             {
@@ -427,13 +427,13 @@ namespace JCowgill.ZMachine.Core
         public byte EncodeToZscii(ZInputCharacter inChar)
         {
             //Special character in use?
-            if (inChar.zsciiChar != 0)
+            if (inChar.ZsciiChar != 0)
             {
-                return inChar.zsciiChar;
+                return inChar.ZsciiChar;
             }
             else
             {
-                return EncodeToZscii(inChar.unicodeChar);
+                return EncodeToZscii(inChar.UnicodeChar);
             }
         }
 

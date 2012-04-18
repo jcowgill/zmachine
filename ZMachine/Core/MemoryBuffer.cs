@@ -30,17 +30,6 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
-        /// Gets the raw byte array used by the buffer
-        /// </summary>
-        public byte[] RawData
-        {
-            get
-            {
-                return buf;
-            }
-        }
-
-        /// <summary>
         /// Returns the buffer's length
         /// </summary>
         public int Length
@@ -85,7 +74,7 @@ namespace JCowgill.ZMachine.Core
         /// <param name="pos">position to get byte from</param>
         public byte GetByte(int pos)
         {
-            if (pos >= buf.Length)
+            if (pos < 0 || pos >= buf.Length)
             {
                 throw new ZMachineException("illegal \"get\" for memory address 0x" + pos.ToString("X8"));
             }
@@ -148,7 +137,7 @@ namespace JCowgill.ZMachine.Core
         /// <param name="data">byte to store</param>
         public void SetByte(int pos, byte data)
         {
-            if (pos >= dynamicLimit)
+            if (pos < 0 || pos >= dynamicLimit)
             {
                 throw new ZMachineException("illegal \"set\" for memory address 0x" + pos.ToString("X8"));
             }

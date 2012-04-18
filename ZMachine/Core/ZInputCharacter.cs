@@ -13,12 +13,12 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Unicode character version (0 if unavaliable)
         /// </summary>
-        public char unicodeChar;
+        public char UnicodeChar { get; set; }
 
         /// <summary>
         /// ZSCII character version (0 if unavaliable)
         /// </summary>
-        public byte zsciiChar;
+        public byte ZsciiChar { get; set; }
 
         /// <summary>
         /// Creates a new input character from a special ZSCII character
@@ -27,20 +27,51 @@ namespace JCowgill.ZMachine.Core
         /// <remarks>
         /// You should use the unicode version of the constructor if this isn't a special character
         /// </remarks>
-        public ZInputCharacter(byte zsciiChar)
+        public ZInputCharacter(byte zsciiChar) : this()
         {
-            this.zsciiChar = zsciiChar;
-            this.unicodeChar = '\0';
+            ZsciiChar = zsciiChar;
+            UnicodeChar = '\0';
         }
 
         /// <summary>
         /// Creates a new input character from a unicode character
         /// </summary>
         /// <param name="unicodeChar">unicode character</param>
-        public ZInputCharacter(char unicodeChar)
+        public ZInputCharacter(char unicodeChar) : this()
         {
-            this.zsciiChar = 0;
-            this.unicodeChar = unicodeChar;
+            ZsciiChar = 0;
+            UnicodeChar = unicodeChar;
+        }
+
+        public override bool Equals(object obj)
+        {
+            //Attempt to unbox object
+            if (obj is ZInputCharacter)
+            {
+                ZInputCharacter inChar = (ZInputCharacter) obj;
+
+                //Test equality
+                return UnicodeChar == inChar.UnicodeChar && ZsciiChar == inChar.ZsciiChar;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public override int GetHashCode()
+        {
+            return 37 * (17 * 37 + (int) UnicodeChar) + ZsciiChar;
+        }
+
+        public static bool operator ==(ZInputCharacter a, ZInputCharacter b)
+        {
+            return a.ZsciiChar == b.ZsciiChar && a.UnicodeChar == b.UnicodeChar;
+        }
+
+        public static bool operator !=(ZInputCharacter a, ZInputCharacter b)
+        {
+            return a.ZsciiChar != b.ZsciiChar || a.UnicodeChar != b.UnicodeChar;
         }
     }
 }
