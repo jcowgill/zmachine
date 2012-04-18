@@ -45,6 +45,7 @@
     <Compile Include="Core\ZCharacterEncoder.cs" />
     <Compile Include="Core\ZInputCharacter.cs" />
     <Compile Include="Core\ZMachineException.cs" />
+    <Compile Include="Core\ZProcessor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
