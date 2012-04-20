@@ -14,17 +14,16 @@ namespace JCowgill.ZMachine.Core
     /// </remarks>
     public abstract class ZProcessor
     {
-        private readonly MemoryBuffer memBuf;
-        private readonly InstructionFunc[] instructions = new InstructionFunc[256];
-
-        //Used to lock execute to 1 call at once (1 = call in progress)
-        private int executeLock = 0;
-
         //Argument type constants
         private const int ArgumentLarge = 0;
         private const int ArgumentSmall = 1;
         private const int ArgumentVariable = 2;
         private const int ArgumentOmitted = 3;
+
+        /// <summary>
+        /// Maximum stack size in ushorts
+        /// </summary>
+        public const int MaxStackSize = 0x10000;
 
         /// <summary>
         /// Delegate called by the instructio processor to run an instruction
@@ -35,6 +34,30 @@ namespace JCowgill.ZMachine.Core
         /// <para>Use argCount to test the number of arguments, not args.Length</para>
         /// </remarks>
         protected delegate void InstructionFunc(int argCount, ushort[] args);
+
+        //Memory and instructions
+        private readonly MemoryBuffer memBuf;
+        private readonly int globalVarsOffset;
+                //Pointer to add to global variable to find in memory (not pointer to the table itself)
+        private readonly InstructionFunc[] instructions = new InstructionFunc[256];
+
+        /*
+         * Stack frame format
+         * ---
+         * 0 = Return frame pointer
+         * 1 = Return program counter (little endian)
+         * 3 = Lower 4 bits = number of local variables
+         *     Next 4 bits = number of arguments
+         *     Bit 8 = 1 if return program counter points to a store address to store result
+         * 4+ = Local variables
+         *     Frame evaluation stack
+         */
+        private ushort[] stack = new ushort[MaxStackSize];
+        private int stackPtr;       //Pointer to next address to write to
+        private int framePtr;       //Pointer to base of current stack frame
+
+        //Used to lock execute to 1 call at once (1 = call in progress)
+        private int executeLock = 0;
 
         /// <summary>
         /// Gets the memory buffer used by the processor
@@ -60,7 +83,11 @@ namespace JCowgill.ZMachine.Core
         /// <param name="buf">memory buffer</param>
         public ZProcessor(MemoryBuffer buf)
         {
+            //Store memory buffer
             memBuf = buf;
+
+            //Cache global vars offset
+            globalVarsOffset = buf.GetUShort(0xC) - 0x10;
         }
 
         /// <summary>
@@ -111,13 +138,38 @@ namespace JCowgill.ZMachine.Core
 
                 case ArgumentSmall:
                     //Byte
-                    value = Memory.GetByte(ProgramCounter++);
-                    return value;
+                    return Memory.GetByte(ProgramCounter++);
 
                 case ArgumentVariable:
-                    //Get from stack, locals or globals
-                    //TODO
-                    return 0;
+                    //Get variable number
+                    int varNum = Memory.GetByte(ProgramCounter++);
+
+                    //Do get
+                    if (varNum == 0)
+                    {
+                        //Pop from stack
+                        if (stackPtr == framePtr + 4 + (stack[framePtr + 3] & 0xF))
+                        {
+                            throw new ZMachineException("stack underflow");
+                        }
+
+                        return stack[stackPtr--];
+                    }
+                    else if (varNum < 0x10)
+                    {
+                        //Get from local variable
+                        if ((stack[framePtr + 3] & 0xF) < varNum)
+                        {
+                            throw new ZMachineException("attempted get from non-existant local variable");
+                        }
+
+                        return stack[framePtr + 3 + varNum];
+                    }
+                    else
+                    {
+                        //Get from global variable
+                        return Memory.GetUShort(globalVarsOffset + varNum);
+                    }
 
                 case ArgumentOmitted:
                 default:
@@ -232,6 +284,159 @@ namespace JCowgill.ZMachine.Core
             {
                 //Unlock
                 executeLock = 0;
+            }
+        }
+
+        /// <summary>
+        /// Used to store the value in the "result" part of the instruction
+        /// </summary>
+        /// <param name="value"></param>
+        /// <remarks>
+        /// <para>If this function is used by an instruction, it MUST ALWAYS be used.</para>
+        /// <para>If InstructionStore and InstructionBranch are both used, InstructionStore must come first.</para>
+        /// </remarks>
+        protected void InstructionStore(ushort value)
+        {
+            //Get variable number
+            int varNum = Memory.GetByte(ProgramCounter++);
+
+            //Do store
+            if (varNum == 0)
+            {
+                //Push on stack
+                if (stackPtr >= MaxStackSize)
+                {
+                    throw new ZMachineException("stack overflow");
+                }
+
+                stack[stackPtr++] = value;
+            }
+            else if (varNum < 0x10)
+            {
+                //Store in local variable
+                if ((stack[framePtr + 3] & 0xF) < varNum)
+                {
+                    throw new ZMachineException("attempted store to non-existant local variable");
+                }
+
+                stack[framePtr + 3 + varNum] = value;
+            }
+            else
+            {
+                //Store in global variable
+                Memory.SetUShort(globalVarsOffset + varNum, value);
+            }
+        }
+
+        /// <summary>
+        /// Branches to another address depending on the result of an operation (passed as flag)
+        /// </summary>
+        /// <param name="result">result of the operation deciding the branch</param>
+        protected void InstructionBranch(bool result)
+        {
+            //Read branch info and offset
+            byte info = Memory.GetByte(ProgramCounter++);
+            int offset;
+
+            if ((info & 0x40) != 0)
+            {
+                //Single byte branch
+                offset = info & 0x3F;
+            }
+            else
+            {
+                //Double byte branch
+                offset = (info & 0x3F) << 8 | Memory.GetByte(ProgramCounter++);
+
+                //Make signed
+                if (offset >= (1 << 13))
+                {
+                    offset = (1 << 13) - offset;
+                }
+            }
+
+            //Do branch
+            if (((info & 0x80) != 0) == result)
+            {
+                //Handle special return branches
+                if (offset == 0 || offset == 1)
+                {
+                    //Return value in offset
+                    InstructionReturn((ushort) offset);
+                }
+                else
+                {
+                    //Move program counter
+                    ProgramCounter += offset - 2;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates and transfers execution to a new stack frame
+        /// </summary>
+        /// <param name="address">the initial value of the program counter for the frame</param>
+        /// <param name="locals">array containing initial values of the locals of this routine</param>
+        /// <param name="argc">number of arguments being passed</param>
+        /// <param name="storeResult">true to store the result of the call after it returns</param>
+        protected void InstructionMakeFrame(int address, ushort[] locals, int args, bool storeResult)
+        {
+            //Validate parameters
+            if (locals.Length > 15 || args > 15)
+            {
+                throw new ArgumentException("too many locals or arguments");
+            }
+
+            //Enough stack space?
+            if (stackPtr + 4 + locals.Length > MaxStackSize)
+            {
+                throw new ZMachineException("stack overflow");
+            }
+
+            //Switch to new frame pointer
+            stack[stackPtr] = (ushort) framePtr;
+            framePtr = stackPtr;
+            stackPtr++;
+
+            //Construct routine info
+            stack[stackPtr++] = (ushort) ProgramCounter;
+            stack[stackPtr++] = (ushort) (ProgramCounter >> 16);
+            stack[stackPtr++] = (ushort) (locals.Length | (args << 4) | (storeResult ? 0x100 : 0));
+
+            //Copy locals
+            Array.Copy(locals, 0, stack, stackPtr, locals.Length);
+            stackPtr += locals.Length;
+
+            //Set new program counter
+            ProgramCounter = address;
+        }
+
+        /// <summary>
+        /// Returns from the current stack frame with the given value
+        /// </summary>
+        /// <param name="retValue">return value of the function (may be discarded)</param>
+        protected void InstructionReturn(ushort retValue)
+        {
+            //In first routine?
+            if (framePtr == 0)
+            {
+                throw new ZMachineException("return from first routine");
+            }
+
+            //Saving result?
+            bool saveResult = (stack[framePtr + 3] & 0x100) != 0;
+
+            //Restore counter
+            ProgramCounter = stack[framePtr + 1] | (stack[framePtr + 2] << 16);
+
+            //Restore stack pointers
+            stackPtr = framePtr;
+            framePtr = stack[framePtr];
+
+            //Save result
+            if (saveResult)
+            {
+                InstructionStore(retValue);
             }
         }
 
