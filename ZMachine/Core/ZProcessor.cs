@@ -37,6 +37,8 @@ namespace JCowgill.ZMachine.Core
 
         //Memory and instructions
         private readonly MemoryBuffer memBuf;
+        private readonly ZCharacterEncoder zEncoder;
+        private readonly IZUserInterface zUi;
         private readonly int globalVarsOffset;
                 //Pointer to add to global variable to find in memory (not pointer to the table itself)
         private readonly InstructionFunc[] instructions = new InstructionFunc[256];
@@ -53,8 +55,9 @@ namespace JCowgill.ZMachine.Core
          *     Frame evaluation stack
          */
         private ushort[] stack = new ushort[MaxStackSize];
-        private int stackPtr;       //Pointer to next address to write to
-        private int framePtr;       //Pointer to base of current stack frame
+        private int stackPtr;        //Pointer to next address to write to
+        private int framePtr;        //Pointer to base of current stack frame
+        private int framesCount = 1; //Number of frames on the stack
 
         //Used to lock execute to 1 call at once (1 = call in progress)
         private int executeLock = 0;
@@ -63,6 +66,16 @@ namespace JCowgill.ZMachine.Core
         /// Gets the memory buffer used by the processor
         /// </summary>
         public MemoryBuffer Memory { get { return memBuf; } }
+
+        /// <summary>
+        /// Returns the ZCharacterEncoder which can encode and decode text in this processor
+        /// </summary>
+        public ZCharacterEncoder TextEncoder { get { return zEncoder; } }
+
+        /// <summary>
+        /// Returns the IZUserInterface allowing interaction with the rest of the world
+        /// </summary>
+        public IZUserInterface UserInterface { get { return zUi; } }
 
         /// <summary>
         /// Gets or sets the location of the next instruction to execute
@@ -81,10 +94,28 @@ namespace JCowgill.ZMachine.Core
         /// Creates a z processor with the given memory buffer
         /// </summary>
         /// <param name="buf">memory buffer</param>
-        public ZProcessor(MemoryBuffer buf)
+        /// <param name="ui">interface with the rest of the world</param>
+        public ZProcessor(MemoryBuffer buf, IZUserInterface ui)
         {
-            //Store memory buffer
+            //Validate params
+            if (buf == null)
+            {
+                throw new ArgumentNullException("buf");
+            }
+            else if (ui == null)
+            {
+                throw new ArgumentNullException("ui");
+            }
+
+            //Set dynamic limit
+            buf.DynamicLimit = Math.Min((int) buf.GetUShort(0xE), 64);
+
+            //Store memory buffer and ui
             memBuf = buf;
+            zUi = ui;
+
+            //Create encoder
+            zEncoder = new ZCharacterEncoder(buf);
 
             //Cache global vars offset
             globalVarsOffset = buf.GetUShort(0xC) - 0x10;
@@ -221,69 +252,64 @@ namespace JCowgill.ZMachine.Core
                 throw new InvalidOperationException("execute cannot be called recursively or at the same time as another thread");
             }
 
-            try
+            //Do reset
+            ProcessorReset();
+
+            //Start decode loop
+            while(!Finished)
             {
-                //Start decode loop
-                while(!Finished)
+                //Get opcode of next instruction
+                byte opNum = Memory.GetByte(ProgramCounter++);
+
+                //Get arguments
+                if(opNum < 0x80)
                 {
-                    //Get opcode of next instruction
-                    byte opNum = Memory.GetByte(ProgramCounter++);
+                    //Long Instruction
+                    args[0] = GetArgument((opNum & 0x40) == 0 ? ArgumentSmall : ArgumentVariable);
+                    args[1] = GetArgument((opNum & 0x20) == 0 ? ArgumentSmall : ArgumentVariable);
+                    argc = 2;
+                }
+                else if(opNum < 0xB0)
+                {
+                    //Short 1OP
+                    args[0] = GetArgument((opNum >> 4) & 3);
+                    argc = 1;
+                }
+                else if(opNum < 0xC0)
+                {
+                    //Short 0OP / Extended (0xBE)
+                    argc = 0;
+                }
+                else if(opNum == 0xEC || opNum == 0xFA)
+                {
+                    //Variable call_vs2 and call_vn2 use 8 arguments
+                    byte argTypes1 = Memory.GetByte(ProgramCounter++);
+                    byte argTypes2 = Memory.GetByte(ProgramCounter++);
 
-                    //Get arguments
-                    if(opNum < 0x80)
-                    {
-                        //Long Instruction
-                        args[0] = GetArgument((opNum & 0x40) == 0 ? ArgumentSmall : ArgumentVariable);
-                        args[1] = GetArgument((opNum & 0x20) == 0 ? ArgumentSmall : ArgumentVariable);
-                        argc = 2;
-                    }
-                    else if(opNum < 0xB0)
-                    {
-                        //Short 1OP
-                        args[0] = GetArgument((opNum >> 4) & 3);
-                        argc = 1;
-                    }
-                    else if(opNum < 0xC0)
-                    {
-                        //Short 0OP / Extended (0xBE)
-                        argc = 0;
-                    }
-                    else if(opNum == 0xEC || opNum == 0xFA)
-                    {
-                        //Variable call_vs2 and call_vn2 use 8 arguments
-                        byte argTypes1 = Memory.GetByte(ProgramCounter++);
-                        byte argTypes2 = Memory.GetByte(ProgramCounter++);
+                    argc = LoadMultipleArguments(argTypes1, 0, args);
 
-                        argc = LoadMultipleArguments(argTypes1, 0, args);
-
-                        if(argc == 4)
-                        {
-                            argc = 4 +  LoadMultipleArguments(argTypes2, 4, args);
-                        }
-                    }
-                    else
+                    if(argc == 4)
                     {
-                        //Variable instruction
-                        byte argTypes = Memory.GetByte(ProgramCounter++);
-                        argc = LoadMultipleArguments(argTypes, 0, args);
-                    }
-
-                    //Do call
-                    if(instructions[opNum] == null)
-                    {
-                        //Illegal instruction
-                        throw new ZMachineException("illegal instruction 0x" + opNum.ToString("X2"));
-                    }
-                    else
-                    {
-                        instructions[opNum](argc, args);
+                        argc = 4 +  LoadMultipleArguments(argTypes2, 4, args);
                     }
                 }
-            }
-            finally
-            {
-                //Unlock
-                executeLock = 0;
+                else
+                {
+                    //Variable instruction
+                    byte argTypes = Memory.GetByte(ProgramCounter++);
+                    argc = LoadMultipleArguments(argTypes, 0, args);
+                }
+
+                //Do call
+                if(instructions[opNum] == null)
+                {
+                    //Illegal instruction
+                    throw new ZMachineException("illegal instruction 0x" + opNum.ToString("X2"));
+                }
+                else
+                {
+                    instructions[opNum](argc, args);
+                }
             }
         }
 
@@ -292,8 +318,8 @@ namespace JCowgill.ZMachine.Core
         /// </summary>
         /// <param name="value"></param>
         /// <remarks>
-        /// <para>If this function is used by an instruction, it MUST ALWAYS be used.</para>
-        /// <para>If InstructionStore and InstructionBranch are both used, InstructionStore must come first.</para>
+        /// <para>This instruction is a post-argument method.</para>
+        /// <para>If multiple post-argument methods are used, InstructionStore must always be first.</para>
         /// </remarks>
         protected void InstructionStore(ushort value)
         {
@@ -332,6 +358,11 @@ namespace JCowgill.ZMachine.Core
         /// Branches to another address depending on the result of an operation (passed as flag)
         /// </summary>
         /// <param name="result">result of the operation deciding the branch</param>
+        /// <remarks>
+        /// <para>This instruction is a post-argument method.</para>
+        /// <para>If multiple post-argument methods are used, InstructionBranch must always be last.</para>
+        /// <para>This method cannot be used with InstructionGetString.</para>
+        /// </remarks>
         protected void InstructionBranch(bool result)
         {
             //Read branch info and offset
@@ -373,6 +404,25 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
+        /// Gets the string stored at the end of this instruction
+        /// </summary>
+        /// <returns>the string to process</returns>
+        /// <remarks>
+        /// <para>This instruction is a post-argument method.</para>
+        /// <para>If multiple post-argument methods are used, InstructionGetString must always be last.</para>
+        /// <para>This method cannot be used with InstructionBranch.</para>
+        /// </remarks>
+        protected string InstructionGetString()
+        {
+            //Decode string
+            ZCharacterEncoder.DecodeResult result = zEncoder.DecodeWithEnd(ProgramCounter);
+
+            //Update counter and return result
+            ProgramCounter = result.EndAddress;
+            return result.Result;
+        }
+
+        /// <summary>
         /// Creates and transfers execution to a new stack frame
         /// </summary>
         /// <param name="address">the initial value of the program counter for the frame</param>
@@ -397,6 +447,7 @@ namespace JCowgill.ZMachine.Core
             stack[stackPtr] = (ushort) framePtr;
             framePtr = stackPtr;
             stackPtr++;
+            framesCount++;
 
             //Construct routine info
             stack[stackPtr++] = (ushort) ProgramCounter;
@@ -432,12 +483,53 @@ namespace JCowgill.ZMachine.Core
             //Restore stack pointers
             stackPtr = framePtr;
             framePtr = stack[framePtr];
+            framesCount--;
 
             //Save result
             if (saveResult)
             {
                 InstructionStore(retValue);
             }
+        }
+
+        /// <summary>
+        /// Creates a snapshot of the execution state
+        /// </summary>
+        /// <returns>a snaphot of the current state</returns>
+        public ZSnapshot CreateSnapshot()
+        {
+            return new ZSnapshot(Memory, stack, framePtr, stackPtr, framesCount);
+        }
+
+        /// <summary>
+        /// Restores a snapshot of the execution state
+        /// </summary>
+        /// <param name="snapshot">snapshot to restore</param>
+        public void RestoreSnapshot(ZSnapshot snapshot)
+        {
+            //Validate snapshot
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException("snapshot");
+            }
+            else if (snapshot.DynamicLimit != Memory.DynamicLimit)
+            {
+                throw new ArgumentException("snapshot memoy size does not equal the memory size of the processor");
+            }
+            
+            //Restore each part
+            snapshot.RestoreStackData(stack);
+            snapshot.RestoreMemory(Memory);
+            framePtr = snapshot.FramePointer;
+            framesCount = snapshot.FramesCount;
+            stackPtr = snapshot.StackPointer;
+        }
+
+        /// <summary>
+        /// Called at the beginning of Execute to reset header entries in the processor
+        /// </summary>
+        protected virtual void ProcessorReset()
+        {
         }
 
         /// <summary>

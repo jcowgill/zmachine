@@ -7,7 +7,7 @@ namespace JCowgill.ZMachine.Core
     /// </summary>
     public class MemoryBuffer
     {
-        private byte[] buf;
+        private readonly byte[] buf;
         private int dynamicLimit;
 
         /// <summary>
@@ -32,13 +32,12 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Returns the buffer's length
         /// </summary>
-        public int Length
-        {
-            get
-            {
-                return buf.Length;
-            }
-        }
+        public int Length { get { return buf.Length; } }
+
+        /// <summary>
+        /// Returns the buffer's raw data
+        /// </summary>
+        public byte[] RawData { get { return buf; } }
 
         /// <summary>
         /// Gets or sets the limit which set options can be used up to

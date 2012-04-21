@@ -225,11 +225,37 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
+        /// The result of decoding a string using DecodeWithEnd
+        /// </summary>
+        public struct DecodeResult
+        {
+            /// <summary>
+            /// The string containing the decoded result
+            /// </summary>
+            public string Result { get; set; }
+
+            /// <summary>
+            /// The address after that of the last character in the string
+            /// </summary>
+            public int EndAddress { get; set; }
+        }
+
+        /// <summary>
         /// Decodes the Z string starting at the given address
         /// </summary>
         /// <param name="address">start address</param>
         /// <returns>a string containing the decoded string</returns>
         public string Decode(int address)
+        {
+            return DecodeWithEnd(address).Result;
+        }
+
+        /// <summary>
+        /// Decodes the Z string starting at the given address
+        /// </summary>
+        /// <param name="address">start address</param>
+        /// <returns>a DecodeResult containing the decoded string and the end address</returns>
+        public DecodeResult DecodeWithEnd(int address)
         {
             //Initialize decode state
             StringBuilder str = new StringBuilder();
@@ -248,11 +274,14 @@ namespace JCowgill.ZMachine.Core
 
             int zsciiFirst = 0;
 
+            //All three characters
+            ushort threeChar;
+
             //Start decode loop
-            for (;;)
+            do
             {
                 //Extract the 3 z characters
-                ushort threeChar = buf.GetUShort(address);
+                threeChar = buf.GetUShort(address);
                 zChars[0] = (byte) ((threeChar >> 10) & 0x1F);
                 zChars[1] = (byte) ((threeChar >> 5) & 0x1F);
                 zChars[2] = (byte) (threeChar & 0x1F);
@@ -384,18 +413,13 @@ namespace JCowgill.ZMachine.Core
 
                 }
 
-                //Exit now?
-                if ((threeChar & 0x8000) != 0)
-                {
-                    break;
-                }
-
                 //Advance address
                 address += 2;
-            }
 
-            //Return complete string
-            return str.ToString();
+            } while ((threeChar & 0x8000) == 0);
+
+            //Return result
+            return new DecodeResult { Result = str.ToString(), EndAddress = address };
         }
 
         /// <summary>
