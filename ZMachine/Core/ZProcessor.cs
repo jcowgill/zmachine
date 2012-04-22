@@ -41,7 +41,54 @@ namespace JCowgill.ZMachine.Core
         private readonly IZUserInterface zUi;
         private readonly int globalVarsOffset;
                 //Pointer to add to global variable to find in memory (not pointer to the table itself)
-        private readonly InstructionFunc[] instructions = new InstructionFunc[256];
+
+        //Lists of instructions
+        private readonly InstructionFunc[] instruction2OP = new InstructionFunc[0x20];
+        private readonly InstructionFunc[] instruction1OP = new InstructionFunc[0x10];
+        private readonly InstructionFunc[] instruction0OP = new InstructionFunc[0x10];
+        private readonly InstructionFunc[] instructionVAR = new InstructionFunc[0x20];
+        private readonly InstructionFunc[] instructionEXT = new InstructionFunc[256];
+
+        /// <summary>
+        /// Array containing 0OP instructions
+        /// </summary>
+        /// <remarks>
+        /// These instructions will ALWAYS be passed 0 arguments
+        /// </remarks>
+        protected InstructionFunc[] Instructions0OP { get { return instruction0OP; } }
+
+        /// <summary>
+        /// Array containing 1OP instructions
+        /// </summary>
+        /// <remarks>
+        /// These instructions will ALWAYS be passed 1 argument
+        /// </remarks>
+        protected InstructionFunc[] Instructions1OP { get { return instruction1OP; } }
+
+        /// <summary>
+        /// Array containing 2OP instructions
+        /// </summary>
+        /// <remarks>
+        /// These instructions may pass 0 to 3 arguments
+        /// </remarks>
+        protected InstructionFunc[] Instructions2OP { get { return instruction2OP; } }
+
+        /// <summary>
+        /// Array containing variable instructions
+        /// </summary>
+        /// <remarks>
+        /// These instructions may pass 0 to 3 arguments
+        /// (except 0xC and 0x1A which may receive 7 arguments)
+        /// </remarks>
+        protected InstructionFunc[] InstructionsVAR { get { return instructionVAR; } }
+
+        /// <summary>
+        /// Array containing extended instructions
+        /// </summary>
+        /// <remarks>
+        /// These instructions may pass 0 to 3 arguments
+        /// </remarks>
+        protected InstructionFunc[] InstructionsEXT { get { return instructionEXT; } }
 
         /*
          * Stack frame format
@@ -91,11 +138,11 @@ namespace JCowgill.ZMachine.Core
         public bool Finished { get; protected set; }
 
         /// <summary>
-        /// Creates a z processor with the given memory buffer
+        /// Creates a new z processor
         /// </summary>
         /// <param name="buf">memory buffer</param>
         /// <param name="ui">interface with the rest of the world</param>
-        public ZProcessor(MemoryBuffer buf, IZUserInterface ui)
+        protected ZProcessor(MemoryBuffer buf, IZUserInterface ui)
         {
             //Validate params
             if (buf == null)
@@ -107,6 +154,15 @@ namespace JCowgill.ZMachine.Core
                 throw new ArgumentNullException("ui");
             }
 
+            //Cache global vars offset
+            globalVarsOffset = buf.GetUShort(0xC) - 0x10;
+
+            //Globals vars must be higher than the header (security)
+            if (globalVarsOffset + 0x10 < 64)
+            {
+                throw new ZMachineException("global variables table must not reside in the header");
+            }
+
             //Set dynamic limit
             buf.DynamicLimit = Math.Min((int) buf.GetUShort(0xE), 64);
 
@@ -116,41 +172,6 @@ namespace JCowgill.ZMachine.Core
 
             //Create encoder
             zEncoder = new ZCharacterEncoder(buf);
-
-            //Cache global vars offset
-            globalVarsOffset = buf.GetUShort(0xC) - 0x10;
-        }
-
-        /// <summary>
-        /// Gets the instruction with the given number
-        /// </summary>
-        /// <param name="number">instruction number</param>
-        protected InstructionFunc GetInstruction(int number)
-        {
-            if (number < 0 || number > 256)
-            {
-                throw new ArgumentOutOfRangeException("number");
-            }
-
-            return instructions[number];
-        }
-
-        /// <summary>
-        /// Sets the instruction function with the given number
-        /// </summary>
-        /// <param name="number">instruction number</param>
-        /// <param name="op">instruction function</param>
-        /// <remarks>
-        /// The instruction number affects how the instruction format is interpreted.
-        /// </remarks>
-        protected void SetInstruction(int number, InstructionFunc op)
-        {
-            if (number < 0 || number > 256)
-            {
-                throw new ArgumentOutOfRangeException("number");
-            }
-
-            instructions[number] = op;
         }
 
         /// <summary>
@@ -172,35 +193,8 @@ namespace JCowgill.ZMachine.Core
                     return Memory.GetByte(ProgramCounter++);
 
                 case ArgumentVariable:
-                    //Get variable number
-                    int varNum = Memory.GetByte(ProgramCounter++);
-
-                    //Do get
-                    if (varNum == 0)
-                    {
-                        //Pop from stack
-                        if (stackPtr == framePtr + 4 + (stack[framePtr + 3] & 0xF))
-                        {
-                            throw new ZMachineException("stack underflow");
-                        }
-
-                        return stack[stackPtr--];
-                    }
-                    else if (varNum < 0x10)
-                    {
-                        //Get from local variable
-                        if ((stack[framePtr + 3] & 0xF) < varNum)
-                        {
-                            throw new ZMachineException("attempted get from non-existant local variable");
-                        }
-
-                        return stack[framePtr + 3 + varNum];
-                    }
-                    else
-                    {
-                        //Get from global variable
-                        return Memory.GetUShort(globalVarsOffset + varNum);
-                    }
+                    //Use InstructionGetVariable
+                    return InstructionGetVariable(Memory.GetByte(ProgramCounter++));
 
                 case ArgumentOmitted:
                 default:
@@ -245,11 +239,20 @@ namespace JCowgill.ZMachine.Core
         {
             ushort[] args = new ushort[8];
             int argc;
+            byte opNum;
+            byte extendedOp = 0;
+            InstructionFunc func;
 
             //Lock the function
             if(Interlocked.CompareExchange(ref executeLock, 1, 0) == 1)
             {
                 throw new InvalidOperationException("execute cannot be called recursively or at the same time as another thread");
+            }
+
+            //Check max size
+            if (Memory.Length > MaximumStorySize)
+            {
+                throw new ZMachineException("story is too large for this z machine");
             }
 
             //Do reset
@@ -259,7 +262,7 @@ namespace JCowgill.ZMachine.Core
             while(!Finished)
             {
                 //Get opcode of next instruction
-                byte opNum = Memory.GetByte(ProgramCounter++);
+                opNum = Memory.GetByte(ProgramCounter++);
 
                 //Get arguments
                 if(opNum < 0x80)
@@ -268,17 +271,36 @@ namespace JCowgill.ZMachine.Core
                     args[0] = GetArgument((opNum & 0x40) == 0 ? ArgumentSmall : ArgumentVariable);
                     args[1] = GetArgument((opNum & 0x20) == 0 ? ArgumentSmall : ArgumentVariable);
                     argc = 2;
+
+                    func = instruction2OP[opNum & 0x1F];
                 }
                 else if(opNum < 0xB0)
                 {
                     //Short 1OP
                     args[0] = GetArgument((opNum >> 4) & 3);
                     argc = 1;
+
+                    func = instruction1OP[opNum & 0xF];
                 }
                 else if(opNum < 0xC0)
                 {
-                    //Short 0OP / Extended (0xBE)
-                    argc = 0;
+                    if (opNum == 0xBE)
+                    {
+                        //Extended
+                        // Get function
+                        extendedOp = Memory.GetByte(ProgramCounter++);
+                        func = instructionEXT[extendedOp];
+
+                        // Get variable args
+                        byte argTypes = Memory.GetByte(ProgramCounter++);
+                        argc = LoadMultipleArguments(argTypes, 0, args);
+                    }
+                    else
+                    {
+                        //Short 0OP
+                        argc = 0;
+                        func = instruction0OP[opNum & 0xF];
+                    }
                 }
                 else if(opNum == 0xEC || opNum == 0xFA)
                 {
@@ -292,42 +314,100 @@ namespace JCowgill.ZMachine.Core
                     {
                         argc = 4 +  LoadMultipleArguments(argTypes2, 4, args);
                     }
+
+                    func = instructionVAR[opNum & 0x1F];
                 }
                 else
                 {
                     //Variable instruction
                     byte argTypes = Memory.GetByte(ProgramCounter++);
                     argc = LoadMultipleArguments(argTypes, 0, args);
+
+                    //Can be 2OP or VAR
+                    if ((opNum & 0x20) == 0)
+                    {
+                        //2OP
+                        func = instruction2OP[opNum & 0x1F];
+                    }
+                    else
+                    {
+                        //VAR
+                        func = instructionVAR[opNum & 0x1F];
+                    }
                 }
 
                 //Do call
-                if(instructions[opNum] == null)
+                if(func == null)
                 {
                     //Illegal instruction
-                    throw new ZMachineException("illegal instruction 0x" + opNum.ToString("X2"));
+                    string message;
+                    if (opNum == 0xBE)
+                    {
+                        message = "illegal extended instruction 0x" + extendedOp.ToString("X2");
+                    }
+                    else
+                    {
+                        message = "illegal instruction 0x" + opNum.ToString("X2");
+                    }
+
+                    throw new ZMachineException(message);
                 }
                 else
                 {
-                    instructions[opNum](argc, args);
+                    func(argc, args);
                 }
             }
         }
 
         /// <summary>
-        /// Used to store the value in the "result" part of the instruction
+        /// Gets the value if the given variable
         /// </summary>
-        /// <param name="value"></param>
-        /// <remarks>
-        /// <para>This instruction is a post-argument method.</para>
-        /// <para>If multiple post-argument methods are used, InstructionStore must always be first.</para>
-        /// </remarks>
-        protected void InstructionStore(ushort value)
+        /// <param name="variable">variable number</param>
+        /// <returns>the variable's value</returns>
+        protected ushort InstructionGetVariable(ushort variable)
         {
-            //Get variable number
-            int varNum = Memory.GetByte(ProgramCounter++);
+            //Do get
+            if (variable == 0)
+            {
+                //Pop from stack
+                if (stackPtr == framePtr + 4 + (stack[framePtr + 3] & 0xF))
+                {
+                    throw new ZMachineException("stack underflow");
+                }
 
+                return stack[stackPtr--];
+            }
+            else if (variable < 0x10)
+            {
+                //Get from local variable
+                if ((stack[framePtr + 3] & 0xF) < variable)
+                {
+                    throw new ZMachineException("attempted get from non-existant local variable");
+                }
+
+                return stack[framePtr + 3 + variable];
+            }
+            else if (variable < 0x100)
+            {
+                //Get from global variable
+                return Memory.GetUShort(globalVarsOffset + variable);
+            }
+            else
+            {
+                //Illegal variable number
+                throw new ZMachineException("invalid variable number 0x" + variable.ToString("X4"));
+            }
+        }
+
+        /// <summary>
+        /// Used to store a value in a variable (stack, local, or global)
+        /// </summary>
+        /// <param name="variable">variable number to store into</param>
+        /// <param name="value">value to store</param>
+        protected void InstructionStoreVariable(ushort variable, ushort value)
+        {
             //Do store
-            if (varNum == 0)
+            if (variable == 0)
             {
                 //Push on stack
                 if (stackPtr >= MaxStackSize)
@@ -337,21 +417,40 @@ namespace JCowgill.ZMachine.Core
 
                 stack[stackPtr++] = value;
             }
-            else if (varNum < 0x10)
+            else if (variable < 0x10)
             {
                 //Store in local variable
-                if ((stack[framePtr + 3] & 0xF) < varNum)
+                if ((stack[framePtr + 3] & 0xF) < variable)
                 {
                     throw new ZMachineException("attempted store to non-existant local variable");
                 }
 
-                stack[framePtr + 3 + varNum] = value;
+                stack[framePtr + 3 + variable] = value;
+            }
+            else if (variable < 0x100)
+            {
+                //Store in global variable
+                Memory.SetUShort(globalVarsOffset + variable, value);
             }
             else
             {
-                //Store in global variable
-                Memory.SetUShort(globalVarsOffset + varNum, value);
+                //Illegal variable number
+                throw new ZMachineException("invalid variable number 0x" + variable.ToString("X4"));
             }
+        }
+
+        /// <summary>
+        /// Used to store the value in the "result" part of the instruction
+        /// </summary>
+        /// <param name="value">value to store</param>
+        /// <remarks>
+        /// <para>This instruction is a post-argument method.</para>
+        /// <para>If multiple post-argument methods are used, InstructionStore must always be first.</para>
+        /// </remarks>
+        protected void InstructionStore(ushort value)
+        {
+            //Pass to proper storer
+            InstructionStoreVariable(Memory.GetByte(ProgramCounter++), value);
         }
 
         /// <summary>
@@ -526,11 +625,15 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
-        /// Called at the beginning of Execute to reset header entries in the processor
+        /// Gets the maximum story size supported by the z machine
         /// </summary>
-        protected virtual void ProcessorReset()
-        {
-        }
+        public abstract int MaximumStorySize { get; }
+
+        /// <summary>
+        /// Called at the beginning of Execute and when restoring the game
+        /// to reset header entries in the processor
+        /// </summary>
+        protected abstract void ProcessorReset();
 
         /// <summary>
         /// Translates the routine packed address provided into a byte address
@@ -542,9 +645,6 @@ namespace JCowgill.ZMachine.Core
         /// Translates the packed string address provided into a byte address
         /// </summary>
         /// <param name="packedAddr">packed address to convert</param>
-        protected virtual int TranslatePackedStrAddress(ushort packedAddr)
-        {
-            return TranslateRoutineAddress(packedAddr);
-        }
+        protected abstract int TranslatePackedStrAddress(ushort packedAddr);
     }
 }
