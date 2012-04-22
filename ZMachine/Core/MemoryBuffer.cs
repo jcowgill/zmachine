@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace JCowgill.ZMachine.Core
+﻿namespace JCowgill.ZMachine.Core
 {
     /// <summary>
     /// Z Machine Memory Buffer

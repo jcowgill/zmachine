@@ -41,6 +41,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Core\DecodeResult.cs" />
     <Compile Include="Core\IZUserInterface.cs" />
     <Compile Include="Core\MemoryBuffer.cs" />
     <Compile Include="Core\ZCharacterEncoder.cs" />

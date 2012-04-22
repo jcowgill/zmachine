@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 namespace JCowgill.ZMachine.Core
@@ -239,22 +238,6 @@ namespace JCowgill.ZMachine.Core
             {
                 return InvalidChar;
             }
-        }
-
-        /// <summary>
-        /// The result of decoding a string using DecodeWithEnd
-        /// </summary>
-        public struct DecodeResult
-        {
-            /// <summary>
-            /// The string containing the decoded result
-            /// </summary>
-            public string Result { get; set; }
-
-            /// <summary>
-            /// The address after that of the last character in the string
-            /// </summary>
-            public int EndAddress { get; set; }
         }
 
         /// <summary>

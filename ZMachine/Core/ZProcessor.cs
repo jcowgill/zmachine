@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace JCowgill.ZMachine.Core
@@ -514,7 +511,7 @@ namespace JCowgill.ZMachine.Core
         protected string InstructionGetString()
         {
             //Decode string
-            ZCharacterEncoder.DecodeResult result = zEncoder.DecodeWithEnd(ProgramCounter);
+            DecodeResult result = zEncoder.DecodeWithEnd(ProgramCounter);
 
             //Update counter and return result
             ProgramCounter = result.EndAddress;

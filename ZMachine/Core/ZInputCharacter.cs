@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-
-namespace JCowgill.ZMachine.Core
+﻿namespace JCowgill.ZMachine.Core
 {
     /// <summary>
     /// Stores character inputs to the z machine (including special characters)

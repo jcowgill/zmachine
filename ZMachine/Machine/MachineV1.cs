@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using JCowgill.ZMachine.Core;
 
 namespace JCowgill.ZMachine.Machine
@@ -585,7 +582,7 @@ namespace JCowgill.ZMachine.Machine
         /// <summary>
         /// Generic call which discards the result and works with any number of arguments
         /// </summary>
-        protected void GenericCallAndDicard(int argc, ushort[] argv)
+        protected void GenericCallAndDiscard(int argc, ushort[] argv)
         {
             GenericCallImpl(argc, argv, false);
         }
@@ -625,7 +622,7 @@ namespace JCowgill.ZMachine.Machine
             StorySetByte(addrees + 1, (byte) data);
         }
 
-        public void StoreB(int argc, ushort[] argv)
+        private void StoreB(int argc, ushort[] argv)
         {
             //Store byte at index in specified table
             if (argc != 3)
@@ -634,7 +631,7 @@ namespace JCowgill.ZMachine.Machine
             StorySetByte(argv[0] + argv[1], (byte) argv[2]);
         }
 
-        public void StoreW(int argc, ushort[] argv)
+        private void StoreW(int argc, ushort[] argv)
         {
             //Store ushort at index in specified table
             if (argc != 3)
@@ -643,7 +640,7 @@ namespace JCowgill.ZMachine.Machine
             StorySetUShort(argv[0] + 2 * argv[1], argv[2]);
         }
 
-        public void PutProp(int argc, ushort[] argv)
+        private void PutProp(int argc, ushort[] argv)
         {
             //Changes the value of the property
             if (argc != 3)
@@ -652,7 +649,7 @@ namespace JCowgill.ZMachine.Machine
             //TODO put_prop
         }
 
-        public void Read(int argc, ushort[] argv)
+        private void Read(int argc, ushort[] argv)
         {
             //Reads a command
             if (argc != 2)
@@ -661,7 +658,7 @@ namespace JCowgill.ZMachine.Machine
             //TODO read
         }
 
-        public void PrintChar(int argc, ushort[] argv)
+        private void PrintChar(int argc, ushort[] argv)
         {
             //Prints a ZSCII character
             if (argc != 1)
@@ -673,7 +670,7 @@ namespace JCowgill.ZMachine.Machine
             //TODO print_char
         }
 
-        public void PrintNum(int argc, ushort[] argv)
+        private void PrintNum(int argc, ushort[] argv)
         {
             //Prints a signed number
             if (argc != 1)
@@ -685,7 +682,7 @@ namespace JCowgill.ZMachine.Machine
             //TODO print_char
         }
 
-        public void RandomFunc(int argc, ushort[] argv)
+        private void RandomFunc(int argc, ushort[] argv)
         {
             ushort retVal = 0;
 
@@ -714,7 +711,7 @@ namespace JCowgill.ZMachine.Machine
             InstructionStore(retVal);
         }
 
-        public void Push(int argc, ushort[] argv)
+        private void Push(int argc, ushort[] argv)
         {
             //Push a value (directly) onto the stack
             if (argc != 1)
@@ -724,7 +721,7 @@ namespace JCowgill.ZMachine.Machine
             InstructionStoreVariable(0, argv[0]);
         }
 
-        public void Pull(int argc, ushort[] argv)
+        private void Pull(int argc, ushort[] argv)
         {
             //Pop variable from the stack
             if (argc != 1)
