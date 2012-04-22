@@ -225,6 +225,23 @@ namespace JCowgill.ZMachine.Core
         }
 
         /// <summary>
+        /// Converts a ZSCII character to its unicode representation
+        /// </summary>
+        /// <param name="zscii">character to convert</param>
+        /// <returns>its unicode representation or InvalidChar on error</returns>
+        public char ZsciiToUnicode(ushort zscii)
+        {
+            if (zscii < 256)
+            {
+                return unicodeCache[zscii];
+            }
+            else
+            {
+                return InvalidChar;
+            }
+        }
+
+        /// <summary>
         /// The result of decoding a string using DecodeWithEnd
         /// </summary>
         public struct DecodeResult
