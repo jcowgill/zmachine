@@ -99,7 +99,7 @@ namespace JCowgill.ZMachine.Machine
             ops[0x0] = Read;
             ops[0x0] = PrintChar;
             ops[0x0] = PrintNum;
-            ops[0x0] = Random;
+            ops[0x0] = RandomFunc;
             ops[0x0] = Push;
             ops[0x0] = Pull;
         }
@@ -685,7 +685,7 @@ namespace JCowgill.ZMachine.Machine
             //TODO print_char
         }
 
-        public void Random(int argc, ushort[] argv)
+        public void RandomFunc(int argc, ushort[] argv)
         {
             ushort retVal = 0;
 
