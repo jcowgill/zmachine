@@ -179,7 +179,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("jin requires 2 operands");
 
-            //TODO jin instruction
+            InstructionBranch(ObjectTree.GetParent(argv[0]) == argv[1]);
         }
 
         private void Test(int argc, ushort[] argv)
@@ -215,7 +215,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("test_attr requires 2 operands");
 
-            //TODO test_attr instruction
+            InstructionBranch(ObjectTree.GetAttribute(argv[0], argv[1]));
         }
 
         private void SetAttr(int argc, ushort[] argv)
@@ -224,7 +224,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("set_attr requires 2 operands");
 
-            //TODO set_attr instruction
+            ObjectTree.SetAttribute(argv[0], argv[1], true);
         }
 
         private void ClearAttr(int argc, ushort[] argv)
@@ -233,7 +233,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("clear_attr requires 2 operands");
 
-            //TODO clear_attr instruction
+            ObjectTree.SetAttribute(argv[0], argv[1], false);
         }
 
         private void Store(int argc, ushort[] argv)
@@ -252,7 +252,11 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("insert_obj requires 2 operands");
 
-            //TODO insert_obj instruction
+            //Check insert to object 0
+            if (argv[1] == 0)
+                throw new ZMachineException("destination object is 0 in insert_obj");
+
+            ObjectTree.SetParent(argv[0], argv[1]);
         }
 
         private void LoadW(int argc, ushort[] argv)
@@ -279,7 +283,38 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("get_prop requires 2 operands");
 
-            //TODO get_prop instruction
+            //Get property address
+            int address = ObjectTree.GetPropertyAddress(argv[0], argv[1]);
+            ushort value;
+
+            //Exists?
+            if (address == 0)
+            {
+                //Get default value
+                value = ObjectTree.GetDefaultProperty(argv[1]);
+            }
+            else
+            {
+                //Get property value
+                int length = ObjectTree.GetPropertyLength(address);
+
+                switch (length)
+                {
+                    case 1:
+                        value = Memory.GetByte(address);
+                        break;
+
+                    case 2:
+                        value = Memory.GetUShort(address);
+                        break;
+
+                    default:
+                        throw new ZMachineException("properties accessed using get_prop must be 1 or 2 bytes long");
+                }
+            }
+
+            //Store value
+            InstructionStore(value);
         }
 
         private void GetPropAddr(int argc, ushort[] argv)
@@ -288,7 +323,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("get_prop_addr requires 2 operands");
 
-            //TODO get_prop_addr instruction
+            InstructionStore((ushort) ObjectTree.GetPropertyAddress(argv[0], argv[1]));
         }
 
         private void GetNextProp(int argc, ushort[] argv)
@@ -297,7 +332,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 2)
                 throw new ZMachineException("get_next_prop requires 2 operands");
 
-            //TODO get_next_prop instruction
+            InstructionStore((ushort) ObjectTree.GetNextProperty(argv[0], argv[1]));
         }
 
         private void Add(int argc, ushort[] argv)
@@ -362,25 +397,29 @@ namespace JCowgill.ZMachine.Machine
         private void GetSibling(int argc, ushort[] argv)
         {
             //Gets the next object in the tree
-            //TODO get_sibling
+            int sibling = ObjectTree.GetSibling(argv[0]);
+            InstructionStore((ushort) sibling);
+            InstructionBranch(sibling != 0);
         }
 
         private void GetChild(int argc, ushort[] argv)
         {
             //Gets the first child of an object in the tree
-            //TODO get_child
+            int child = ObjectTree.GetChild(argv[0]);
+            InstructionStore((ushort) child);
+            InstructionBranch(child != 0);
         }
 
         private void GetParent(int argc, ushort[] argv)
         {
             //Gets the parent of an object in the tree
-            //TODO get_parent
+            InstructionStore((ushort) ObjectTree.GetParent(argv[0]));
         }
 
         private void GetPropLen(int argc, ushort[] argv)
         {
-            //Gets the length of the given property
-            //TODO get_prop_len
+            //Gets the length of the given property (by address)
+            InstructionStore((ushort) ObjectTree.GetPropertyLength(argv[0]));
         }
 
         private void PrintAddr(int argc, ushort[] argv)
@@ -402,13 +441,13 @@ namespace JCowgill.ZMachine.Machine
         private void RemoveObj(int argc, ushort[] argv)
         {
             //Detaches the object from its parent
-
-            //TODO remove_obj
+            ObjectTree.SetParent(argv[0], 0);
         }
 
         private void PrintObj(int argc, ushort[] argv)
         {
             //Prints the short name of an object
+            string str = TextEncoder.Decode(ObjectTree.GetObjectName(argv[0]));
 
             //TODO print_obj
         }
@@ -646,7 +685,7 @@ namespace JCowgill.ZMachine.Machine
             if (argc != 3)
                 throw new ZMachineException("put_prop requires 3 operands");
 
-            //TODO put_prop
+            ObjectTree.PutProperty(argv[0], argv[1], argv[2]);
         }
 
         private void Read(int argc, ushort[] argv)

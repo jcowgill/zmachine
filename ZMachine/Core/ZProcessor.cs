@@ -36,6 +36,7 @@ namespace JCowgill.ZMachine.Core
         private readonly MemoryBuffer memBuf;
         private readonly ZCharacterEncoder zEncoder;
         private readonly IUserInterface zUi;
+        private readonly ZObjectTree objectTree;
         private readonly int globalVarsOffset;
                 //Pointer to add to global variable to find in memory (not pointer to the table itself)
 
@@ -122,6 +123,11 @@ namespace JCowgill.ZMachine.Core
         public IUserInterface UserInterface { get { return zUi; } }
 
         /// <summary>
+        /// Gets the object tree manipulator object
+        /// </summary>
+        protected ZObjectTree ObjectTree { get { return objectTree; } }
+
+        /// <summary>
         /// Gets or sets the location of the next instruction to execute
         /// </summary>
         public int ProgramCounter { get; protected set; }
@@ -167,8 +173,9 @@ namespace JCowgill.ZMachine.Core
             memBuf = buf;
             zUi = ui;
 
-            //Create encoder
+            //Create encoder and object tree
             zEncoder = new ZCharacterEncoder(buf);
+            objectTree = new ZObjectTree(buf);
         }
 
         /// <summary>
