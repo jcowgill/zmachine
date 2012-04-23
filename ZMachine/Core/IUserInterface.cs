@@ -8,7 +8,7 @@ namespace JCowgill.ZMachine.Core
     /// <summary>
     /// Provides methods which the processor uses to access the rest of the world
     /// </summary>
-    public interface IZUserInterface
+    public interface IUserInterface
     {
     }
 }

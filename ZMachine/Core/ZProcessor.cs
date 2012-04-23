@@ -35,7 +35,7 @@ namespace JCowgill.ZMachine.Core
         //Memory and instructions
         private readonly MemoryBuffer memBuf;
         private readonly ZCharacterEncoder zEncoder;
-        private readonly IZUserInterface zUi;
+        private readonly IUserInterface zUi;
         private readonly int globalVarsOffset;
                 //Pointer to add to global variable to find in memory (not pointer to the table itself)
 
@@ -119,7 +119,7 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Returns the IZUserInterface allowing interaction with the rest of the world
         /// </summary>
-        public IZUserInterface UserInterface { get { return zUi; } }
+        public IUserInterface UserInterface { get { return zUi; } }
 
         /// <summary>
         /// Gets or sets the location of the next instruction to execute
@@ -139,7 +139,7 @@ namespace JCowgill.ZMachine.Core
         /// </summary>
         /// <param name="buf">memory buffer</param>
         /// <param name="ui">interface with the rest of the world</param>
-        protected ZProcessor(MemoryBuffer buf, IZUserInterface ui)
+        protected ZProcessor(MemoryBuffer buf, IUserInterface ui)
         {
             //Validate params
             if (buf == null)

@@ -21,7 +21,7 @@ namespace JCowgill.ZMachine.Machine
         /// </summary>
         /// <param name="buf">memory buffer</param>
         /// <param name="ui">interface with the rest of the world</param>
-        public MachineV1(MemoryBuffer buf, IZUserInterface ui)
+        public MachineV1(MemoryBuffer buf, IUserInterface ui)
             : base(buf, ui)
         {
             InstructionFunc[] ops;
