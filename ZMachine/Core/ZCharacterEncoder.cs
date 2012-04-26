@@ -10,7 +10,7 @@ namespace JCowgill.ZMachine.Core
     public sealed class ZCharacterEncoder
     {
         private readonly MemoryBuffer buf;
-        
+
         private readonly char[] unicodeCache;
         private readonly Dictionary<char, byte> reverseUnicodeCache = new Dictionary<char, byte>();
 
@@ -19,6 +19,9 @@ namespace JCowgill.ZMachine.Core
 
         private readonly string[] abbreviationCache;
         private readonly int machineVersion;
+
+        private readonly DictionaryInfo mainDictionary;
+        private readonly int mainDictionaryAddress;
 
         /// <summary>
         /// Default unicode translation table (ZSCII 155 - 251)
@@ -109,6 +112,10 @@ namespace JCowgill.ZMachine.Core
             {
                 this.abbreviationCache = CreateAbbreviationCache(buf.GetUShort(0x18));
             }
+
+            //Cache dictionary information
+            mainDictionaryAddress = buf.GetUShort(0x8);
+            mainDictionary = GetDictionaryInfo(mainDictionaryAddress);
         }
 
         /// <summary>
@@ -267,7 +274,7 @@ namespace JCowgill.ZMachine.Core
             // 4   = ZSCII first char
             // 5   = ZSCII second char
             int special = 0;
-            
+
             int alphabet = 0;
             int alphabetPerm = 0;
             bool alphabetKeep = false;
@@ -464,8 +471,9 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Encodes the given ZSCII WORD into Z characters (eg in alphabets) for dictionary lookup
         /// </summary>
-        /// <param name="zsciiStr">string of bytes encoded using EncodeToZscii</param>
-        /// <returns>an array containing 4 or 6 bytes (depending on version) of z characters</returns>
+        /// <param name="address">address of zscii characters to encode</param>
+        /// <param name="length">length of string</param>
+        /// <returns>an array containing 2 or 3 ushorts (depending on version) of z characters</returns>
         /// <remarks>
         /// <para>The array returned is suitible for directly looking up with the dictionary. In particular:</para>
         /// <list type="bullet">
@@ -480,91 +488,383 @@ namespace JCowgill.ZMachine.Core
         ///     </item>
         /// </list>
         /// </remarks>
-        public byte[] EncodeForDictionary(byte[] zsciiStr)
+        public ushort[] EncodeForDictionary(int address, int length)
         {
             //Create base z character array
             byte[] charArray = new byte[] { 5, 5, 5, 5, 5, 5, 5, 5, 5 };     //9 fives
-            int maxChars = machineVersion >= 4 ? 9 : 6;
             int zCharPos = 0;
 
+            //Limit length to maximum
+            length = Math.Min(length, (machineVersion >= 4) ? 9 : 6);
+
             //Encode characters
-            for (int i = 0; i < zsciiStr.Length && zCharPos < maxChars; i++)
+            for (int i = 0; zCharPos < length; i++)
             {
-				byte zscii = zsciiStr[i];
-			
+                byte zscii = buf.GetByte(address + i);
+
                 //To lower case
-				if(zscii >= (byte) 'A' && zscii <= (byte) 'Z')
-				{
-					zscii += 'a' - 'A';
-				}
-				
-				//Attempt to convert via alphabet
-				byte zChar = reverseAlphabetCache[zscii];
-				
-				if(zChar != 0)
-				{
-					//Take away 1 to get the alphabet character
-					zChar--;
-					
-					//Which alphabet?
-					if(zChar >= 26)
-					{
-						//A1 or A2
-						// Using 2 chars
-						if(zCharPos + 2 > maxChars)
-						{
-							break;
-						}
-						
-						if(zChar >= 26 * 2)
-						{
-							//A2
-							charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3;
-						}
-						else
-						{
-							//A1
-							charArray[zCharPos++] = machineVersion >= 3 ? (byte) 4 : (byte) 2;
-						}
-					}
-					
-					//Print raw character
-					charArray[zCharPos++] = zChar;
-				}
-				else
-				{
-					//Use raw ZSCII form
-					// Using 4 chars
-					if(zCharPos + 4 > maxChars)
-					{
-						break;
-					}
-					
-					//Print parts of character
-					charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3; //Shift A2
-					charArray[zCharPos++] = (byte) 6;	   //Raw ZSCII request
-					charArray[zCharPos++] = (byte) (zscii >> 5);
-					charArray[zCharPos++] = (byte) (zscii & 0x1F);
-				}
+                if(zscii >= (byte) 'A' && zscii <= (byte) 'Z')
+                {
+                    zscii += 'a' - 'A';
+                }
+
+                //Attempt to convert via alphabet
+                byte zChar = reverseAlphabetCache[zscii];
+
+                if(zChar != 0)
+                {
+                    //Take away 1 to get the alphabet character
+                    zChar--;
+
+                    //Which alphabet?
+                    if(zChar >= 26)
+                    {
+                        //A1 or A2
+                        // Using 2 chars
+                        if(zCharPos + 2 > length)
+                        {
+                            break;
+                        }
+
+                        if(zChar >= 26 * 2)
+                        {
+                            //A2
+                            charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3;
+                        }
+                        else
+                        {
+                            //A1
+                            charArray[zCharPos++] = machineVersion >= 3 ? (byte) 4 : (byte) 2;
+                        }
+                    }
+
+                    //Print raw character
+                    charArray[zCharPos++] = zChar;
+                }
+                else
+                {
+                    //Use raw ZSCII form
+                    // Using 4 chars
+                    if(zCharPos + 4 > length)
+                    {
+                        break;
+                    }
+
+                    //Print parts of character
+                    charArray[zCharPos++] = machineVersion >= 3 ? (byte) 5 : (byte) 3; //Shift A2
+                    charArray[zCharPos++] = (byte) 6;	   //Raw ZSCII request
+                    charArray[zCharPos++] = (byte) (zscii >> 5);
+                    charArray[zCharPos++] = (byte) (zscii & 0x1F);
+                }
             }
-			
-			//Re-encode using packed zscii format
-            byte[] packed = new byte[machineVersion >= 4 ? 6 : 4];
 
-            packed[0] = (byte) (charArray[0] << 2 | charArray[1] >> 3);
-            packed[1] = (byte) (charArray[1] << 5 | charArray[2]);
+            //Re-encode using packed zscii format
+            ushort[] packed = new ushort[machineVersion >= 4 ? 3 : 2];
 
-            packed[2] = (byte) (charArray[3] << 2 | charArray[3] >> 3);
-            packed[3] = (byte) (charArray[4] << 5 | charArray[5]);
+            packed[0] = (ushort) (charArray[0] << 10 | charArray[1] << 5 | charArray[2]);
+            packed[1] = (ushort) (charArray[3] << 10 | charArray[4] << 5 | charArray[5]);
 
             if (machineVersion >= 4)
             {
-                packed[4] = (byte) (charArray[6] << 2 | charArray[7] >> 3);
-                packed[5] = (byte) (charArray[7] << 5 | charArray[8]);
+                packed[2] = (ushort) (0x8000 | charArray[6] << 10 | charArray[7] << 5 | charArray[8]);
             }
-            
+            else
+            {
+                packed[1] |= 0x8000;
+            }
+
             //Return final array
             return packed;
+        }
+
+        /// <summary>
+        /// Contains information about a dictionary
+        /// </summary>
+        private struct DictionaryInfo
+        {
+            public byte[] WordSeparators;
+            public bool Sorted;
+
+            public int DictionaryStart;
+            public int EntryCount;
+            public int EntrySize;
+        }
+
+        /// <summary>
+        /// Gets the dictionary info structure for a dictionary
+        /// </summary>
+        /// <param name="dictionary">dictionary address</param>
+        private DictionaryInfo GetDictionaryInfo(int dictionary)
+        {
+            DictionaryInfo info;
+
+            //Get word separators
+            info.WordSeparators = new byte[buf.GetByte(dictionary++)];
+            for (int i = 0; i < info.WordSeparators.Length; i++)
+            {
+                info.WordSeparators[i] = buf.GetByte(dictionary++);
+            }
+
+            //Get entry count
+            info.EntryCount = buf.GetShort(dictionary);
+            if (info.EntryCount < 0)
+            {
+                info.EntryCount = -info.EntryCount;
+                info.Sorted = false;
+            }
+            else
+            {
+                info.Sorted = true;
+            }
+
+            //Get other information
+            info.EntrySize = buf.GetByte(dictionary++);
+            info.DictionaryStart = dictionary + 2;
+
+            //Entire dictionary must not be in high memory
+            if (info.DictionaryStart + info.EntryCount > ushort.MaxValue)
+            {
+                throw new ZMachineException("dictionary at 0x" + dictionary.ToString("X8") + " is partially in high memory");
+            }
+
+            //Check entry size
+            if (info.EntrySize < (machineVersion >= 4 ? 6 : 4))
+            {
+                throw new ZMachineException("size of dictionary entries is too small");
+            }
+
+            return info;
+        }
+
+        /// <summary>
+        /// Reads the numerical entry in a dictionary
+        /// </summary>
+        /// <param name="address">address of word</param>
+        /// <returns>integer number of encoded text</returns>
+        private ulong ReadEntry(int address)
+        {
+            if(machineVersion >= 4)
+            {
+                return buf.GetUInt(address) << 16 | buf.GetUShort(address + 4);
+            }
+            else
+            {
+                return buf.GetUInt(address);
+            }
+        }
+
+        /// <summary>
+        /// Looks up a word and adds it to the parse buffer
+        /// </summary>
+        /// <param name="wordAddress">address of word</param>
+        /// <param name="length">length of word</param>
+        /// <param name="parseAddress">address to add to</param>
+        /// <returns>new parse address</returns>
+        private void LookupWord(DictionaryInfo info, int textBuffer, int wordOffset, int length,
+                                int parseAddress, bool ignoreUnknownWords)
+        {
+            //Ignore empty words
+            if (length == 0)
+                return;
+
+            //Encode text
+            ushort[] encoded = EncodeForDictionary(textBuffer + wordOffset, length);
+            ulong encodedInteger;
+
+            if (machineVersion >= 4)
+            {
+                encodedInteger = (ulong) (encoded[0] << 32 | encoded[1] << 16 | encoded[2]);
+            }
+            else
+            {
+                encodedInteger = (ulong) (encoded[0] << 16 | encoded[1]);
+            }
+
+            //Find in dictionary
+            if (info.Sorted)
+            {
+                int leftPtr = 0;
+                int rightPtr = info.EntryCount;
+
+                //Do binary search
+                while (rightPtr > leftPtr)
+                {
+                    //Find midpoint
+                    int mid = (leftPtr + rightPtr) / 2;
+                    ulong entry = ReadEntry(info.DictionaryStart + mid * info.EntrySize);
+
+                    //How does that entry compare
+                    if (entry < encodedInteger)
+                    {
+                        //Use left half
+                        rightPtr = mid - 1;
+                    }
+                    else if (entry > encodedInteger)
+                    {
+                        //Use right half
+                        leftPtr = mid + 1;
+                    }
+                    else
+                    {
+                        //Equal - word found
+                        buf.SetUShort(parseAddress, (ushort) (info.DictionaryStart + mid * info.EntrySize));
+                        buf.SetByte(parseAddress + 2, (byte) length);
+                        buf.SetByte(parseAddress + 3, (byte) wordOffset);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                //Linear search
+                int dictEnd = info.DictionaryStart + info.EntryCount * info.EntrySize;
+
+                for (int dictAddress = info.DictionaryStart; dictAddress < dictEnd;
+                        dictAddress += info.EntrySize)
+                {
+                    //Compare
+                    if (ReadEntry(dictAddress) == encodedInteger)
+                    {
+                        //Equal - word found
+                        buf.SetUShort(parseAddress, (ushort) dictAddress);
+                        buf.SetByte(parseAddress + 2, (byte) length);
+                        buf.SetByte(parseAddress + 3, (byte) wordOffset);
+                        return;
+                    }
+                }
+            }
+
+            //Unknown word
+            if (!ignoreUnknownWords)
+            {
+                buf.SetUInt(parseAddress, 0);
+            }
+        }
+
+        /// <summary>
+        /// Tokenises a text buffer using the main dictionary
+        /// </summary>
+        /// <param name="textBuffer">address of input text buffer</param>
+        /// <param name="parseBuffer">address of parse output buffer</param>
+        /// <remarks>
+        /// The format of the input buffer, output buffer and dictionary depends
+        /// on the machine version (see spec).
+        /// </remarks>
+        public void Tokenise(int textBuffer, int parseBuffer)
+        {
+            Tokenise(textBuffer, parseBuffer, 0, false);
+        }
+
+        /// <summary>
+        /// Tokenises a text buffer using the specified dictionary
+        /// </summary>
+        /// <param name="textBuffer">address of input text buffer</param>
+        /// <param name="parseBuffer">address of parse output buffer</param>
+        /// <param name="dictionary">address of dictionary to scan</param>
+        /// <param name="ignoreUnknownWords">does not write anything to the parse buffer for unknown words</param>
+        /// <remarks>
+        /// The format of the input buffer, output buffer and dictionary depends
+        /// on the machine version (see spec).
+        /// </remarks>
+        public void Tokenise(int textBuffer, int parseBuffer, int dictionary, bool ignoreUnknownWords)
+        {
+            DictionaryInfo info;
+            int wordStart = 0;
+            int parseAddress = parseBuffer + 2;
+            int wordsLeft = buf.GetByte(parseBuffer);
+
+            //Get dictionary info
+            if (dictionary == 0 || dictionary == mainDictionaryAddress)
+            {
+                //Use main dictionary
+                info = mainDictionary;
+            }
+            else
+            {
+                //Create info for custom dictionary
+                info = GetDictionaryInfo(dictionary);
+            }
+
+            //Check if parse buffer is in header
+            if (parseBuffer < 64)
+            {
+                throw new ZMachineException("parse buffer is in the header");
+            }
+
+            //Get text buffer length
+            int length;
+            if (machineVersion >= 5)
+            {
+                //Use max buffer length
+                length = buf.GetByte(textBuffer);
+            }
+            else
+            {
+                //Use text length
+                length = buf.GetByte(textBuffer + 1);
+                textBuffer++;
+            }
+
+            //Move to start of text
+            textBuffer++;
+
+            //Start parsing text buffer
+            int i = 0;
+            for (; i < length; i++)
+            {
+                //Get character
+                byte c = buf.GetByte(textBuffer + i);
+
+                //Check for null and maximum number of words stored
+                if (c == 0 && machineVersion < 5 || wordsLeft == 0)
+                    break;
+
+                //Delimiter?
+                if (c == ' ' || Array.IndexOf(info.WordSeparators, c) != -1)
+                {
+                    //Add this word to parse buffer
+                    if (i > wordStart)
+                    {
+                        //Lookup
+                        LookupWord(info, textBuffer, wordStart, i - wordStart, parseAddress, ignoreUnknownWords);
+
+                        //Advance pointers
+                        parseAddress += 4;
+                        wordsLeft--;
+                    }
+
+                    //Add delimiter
+                    if (c != ' ')
+                    {
+                        //Max words left
+                        if(wordsLeft == 0)
+                            break;
+
+                        //Lookup
+                        LookupWord(info, textBuffer, i, 1, parseAddress, ignoreUnknownWords);
+
+                        //Advance pointers
+                        parseAddress += 4;
+                        wordsLeft--;
+                    }
+
+                    //Update start of word
+                    wordStart = i + 1;
+                }
+            }
+
+            //Add this word to buffer
+            if (i > wordStart && wordsLeft > 0)
+            {
+                //Lookup
+                LookupWord(info, textBuffer, wordStart, i - wordStart, parseAddress, ignoreUnknownWords);
+
+                //Advance parse address
+                parseAddress += 4;
+            }
+
+            //Store number of parsed words
+            buf.SetByte(parseBuffer + 1, (byte) ((parseAddress - parseBuffer - 2) / 4));
         }
     }
 }
