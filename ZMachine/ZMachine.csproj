@@ -11,6 +11,7 @@
     <AssemblyName>JCowgill.ZMachine</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -45,7 +46,7 @@
     <Compile Include="Core\IUserInterface.cs" />
     <Compile Include="Core\ZObjectTree.cs" />
     <Compile Include="Core\MemoryBuffer.cs" />
-    <Compile Include="Core\ZCharacterEncoder.cs" />
+    <Compile Include="Core\ZTextEncoder.cs" />
     <Compile Include="Core\ZInputCharacter.cs" />
     <Compile Include="Core\ZMachineException.cs" />
     <Compile Include="Core\ZProcessor.cs" />

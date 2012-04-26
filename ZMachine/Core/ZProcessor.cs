@@ -34,7 +34,7 @@ namespace JCowgill.ZMachine.Core
 
         //Memory and instructions
         private readonly MemoryBuffer memBuf;
-        private readonly ZCharacterEncoder zEncoder;
+        private readonly ZTextEncoder zEncoder;
         private readonly IUserInterface zUi;
         private readonly ZObjectTree objectTree;
         private readonly int globalVarsOffset;
@@ -115,7 +115,7 @@ namespace JCowgill.ZMachine.Core
         /// <summary>
         /// Returns the ZCharacterEncoder which can encode and decode text in this processor
         /// </summary>
-        public ZCharacterEncoder TextEncoder { get { return zEncoder; } }
+        public ZTextEncoder TextEncoder { get { return zEncoder; } }
 
         /// <summary>
         /// Returns the IZUserInterface allowing interaction with the rest of the world
@@ -174,7 +174,7 @@ namespace JCowgill.ZMachine.Core
             zUi = ui;
 
             //Create encoder and object tree
-            zEncoder = new ZCharacterEncoder(buf);
+            zEncoder = new ZTextEncoder(buf);
             objectTree = new ZObjectTree(buf);
         }
 

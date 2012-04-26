@@ -7,7 +7,7 @@ namespace JCowgill.ZMachine.Core
     /// <summary>
     /// Encodes and Decodes strings used by the Z-Machine
     /// </summary>
-    public sealed class ZCharacterEncoder
+    public sealed class ZTextEncoder
     {
         private readonly MemoryBuffer buf;
 
@@ -54,7 +54,7 @@ namespace JCowgill.ZMachine.Core
         /// Creates a new z machine character encoder
         /// </summary>
         /// <param name="buf">game memory buffer</param>
-        public ZCharacterEncoder(MemoryBuffer buf)
+        public ZTextEncoder(MemoryBuffer buf)
         {
             //Store buffer
             this.buf = buf;
