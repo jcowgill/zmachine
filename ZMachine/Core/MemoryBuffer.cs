@@ -1,8 +1,11 @@
-﻿namespace JCowgill.ZMachine.Core
+﻿using System;
+
+namespace JCowgill.ZMachine.Core
 {
     /// <summary>
     /// Z Machine Memory Buffer
     /// </summary>
+    [Serializable]
     public class MemoryBuffer
     {
         private readonly byte[] buf;

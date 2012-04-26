@@ -104,12 +104,18 @@ namespace JCowgill.ZMachine.Machine
         private void Je(int argc, ushort[] argv)
         {
             //Jump if equal (0 is equal to any of the others)
+            // Must have >= 2 operands
+            if(argc < 2)
+                throw new ZMachineException("je requires at least 2 operands");
+
+            // Get argument
             ushort arg0 = argv[0];
 
+            // Do branch
             InstructionBranch(
-                    argc >= 2 && (arg0 == argv[1] ||
+                    arg0 == argv[1] ||
                     (argc >= 3 && (arg0 == argv[2] ||
-                    (argc >= 4 && arg0 == argv[3]))))
+                    (argc >= 4 && arg0 == argv[3])))
                 );
         }
 
@@ -461,7 +467,7 @@ namespace JCowgill.ZMachine.Machine
         private void Jump(int argc, ushort[] argv)
         {
             //Unconditional relative jump
-            ProgramCounter += (short) argv[0];
+            ProgramCounter += (short) argv[0] - 2;
         }
 
         private void Load(int argc, ushort[] argv)

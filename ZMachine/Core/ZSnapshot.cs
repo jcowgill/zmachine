@@ -8,6 +8,7 @@ namespace JCowgill.ZMachine.Core
     /// <summary>
     /// Class containg a snapshot of the modifiable state of the ZMachine
     /// </summary>
+    [Serializable]
     public class ZSnapshot
     {
         private readonly byte[] dynamicMem;
