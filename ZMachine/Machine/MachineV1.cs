@@ -140,15 +140,15 @@ namespace JCowgill.ZMachine.Machine
         private void Dec(int argc, ushort[] argv)
         {
             //Decrement and store
-            short value = (short) (InstructionGetVariable(argv[0]) - 1);
-            InstructionStoreVariable(argv[0], (ushort) value);
+            short value = (short) (InstructionGetVariable(argv[0], false) - 1);
+            InstructionStoreVariable(argv[0], (ushort) value, false);
         }
 
         private void Inc(int argc, ushort[] argv)
         {
             //Increment and store
-            short value = (short) (InstructionGetVariable(argv[0]) + 1);
-            InstructionStoreVariable(argv[0], (ushort) value);
+            short value = (short) (InstructionGetVariable(argv[0], false) + 1);
+            InstructionStoreVariable(argv[0], (ushort) value, false);
         }
 
         private void DecChk(int argc, ushort[] argv)
@@ -158,8 +158,8 @@ namespace JCowgill.ZMachine.Machine
                 throw new ZMachineException("dec_chk requires 2 operands");
 
             //Decrement and store
-            short value = (short) (InstructionGetVariable(argv[0]) - 1);
-            InstructionStoreVariable(argv[0], (ushort) value);
+            short value = (short) (InstructionGetVariable(argv[0], false) - 1);
+            InstructionStoreVariable(argv[0], (ushort) value, false);
 
             //Branch?
             InstructionBranch(value < (short) argv[1]);
@@ -172,8 +172,8 @@ namespace JCowgill.ZMachine.Machine
                 throw new ZMachineException("inc_chk requires 2 operands");
 
             //Increment and store
-            short value = (short) (InstructionGetVariable(argv[0]) + 1);
-            InstructionStoreVariable(argv[0], (ushort) value);
+            short value = (short) (InstructionGetVariable(argv[0], false) + 1);
+            InstructionStoreVariable(argv[0], (ushort) value, false);
 
             //Branch?
             InstructionBranch(value > (short) argv[1]);
@@ -249,7 +249,7 @@ namespace JCowgill.ZMachine.Machine
                 throw new ZMachineException("store requires 2 operands");
 
             //Do store
-            InstructionStoreVariable(argv[0], argv[1]);
+            InstructionStoreVariable(argv[0], argv[1], false);
         }
 
         private void InsertObj(int argc, ushort[] argv)
@@ -473,7 +473,7 @@ namespace JCowgill.ZMachine.Machine
         private void Load(int argc, ushort[] argv)
         {
             //Store the value of a variable
-            InstructionStore(InstructionGetVariable(argv[0]));
+            InstructionStore(InstructionGetVariable(argv[0], false));
         }
 
         private void Not(int argc, ushort[] argv)
@@ -544,13 +544,13 @@ namespace JCowgill.ZMachine.Machine
         private void RetPopped(int argc, ushort[] argv)
         {
             //Returns value on stack
-            InstructionReturn(InstructionGetVariable(0));
+            InstructionReturn(InstructionGetVariable(0, false));
         }
 
         private void Pop(int argc, ushort[] argv)
         {
             //Pop value and discard
-            InstructionGetVariable(0);
+            InstructionGetVariable(0, true);
         }
 
         private void Quit(int argc, ushort[] argv)
@@ -763,7 +763,7 @@ namespace JCowgill.ZMachine.Machine
                 throw new ZMachineException("push requires 1 operand");
 
             //Do store to var 0
-            InstructionStoreVariable(0, argv[0]);
+            InstructionStoreVariable(0, argv[0], true);
         }
 
         private void Pull(int argc, ushort[] argv)
@@ -775,7 +775,7 @@ namespace JCowgill.ZMachine.Machine
             //Ignore if restoring onto the stack
             if (argv[0] != 0)
             {
-                InstructionStoreVariable(argv[0], InstructionGetVariable(0));
+                InstructionStoreVariable(argv[0], InstructionGetVariable(0, false), false);
             }
         }
 

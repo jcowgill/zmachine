@@ -198,7 +198,7 @@ namespace JCowgill.ZMachine.Core
 
                 case ArgumentVariable:
                     //Use InstructionGetVariable
-                    return InstructionGetVariable(Memory.GetByte(ProgramCounter++));
+                    return InstructionGetVariable(Memory.GetByte(ProgramCounter++), true);
 
                 case ArgumentOmitted:
                 default:
@@ -367,19 +367,29 @@ namespace JCowgill.ZMachine.Core
         /// Gets the value if the given variable
         /// </summary>
         /// <param name="variable">variable number</param>
+        /// <param name="pop">true if a get from the stack pointer pops the value</param>
         /// <returns>the variable's value</returns>
-        protected ushort InstructionGetVariable(ushort variable)
+        protected ushort InstructionGetVariable(ushort variable, bool pop)
         {
             //Do get
             if (variable == 0)
             {
-                //Pop from stack
+                //Check stack underflow
                 if (stackPtr == framePtr + 4 + (stack[framePtr + 3] & 0xF))
                 {
                     throw new ZMachineException("stack underflow");
                 }
 
-                return stack[stackPtr--];
+                //Get value
+                ushort value = stack[stackPtr - 1];
+
+                //Pop from stack
+                if(pop)
+                {
+                    stackPtr--;
+                }
+
+                return value;
             }
             else if (variable < 0x10)
             {
@@ -408,18 +418,34 @@ namespace JCowgill.ZMachine.Core
         /// </summary>
         /// <param name="variable">variable number to store into</param>
         /// <param name="value">value to store</param>
-        protected void InstructionStoreVariable(ushort variable, ushort value)
+        /// <param name="push">true if a store to the stack pointer pushes the value (rather than overwrite it)</param>
+        protected void InstructionStoreVariable(ushort variable, ushort value, bool push)
         {
             //Do store
             if (variable == 0)
             {
-                //Push on stack
-                if (stackPtr >= MaxStackSize)
+                //Push or overwrite?
+                if(push)
                 {
-                    throw new ZMachineException("stack overflow");
-                }
+                    //Push on stack
+                    if (stackPtr >= MaxStackSize)
+                    {
+                        throw new ZMachineException("stack overflow");
+                    }
 
-                stack[stackPtr++] = value;
+                    stack[stackPtr++] = value;
+                }
+                else
+                {
+                    //Check stack underflow
+                    if (stackPtr == framePtr + 4 + (stack[framePtr + 3] & 0xF))
+                    {
+                        throw new ZMachineException("stack underflow");
+                    }
+
+                    //Overwrite
+                    stack[stackPtr - 1] = value;
+                }
             }
             else if (variable < 0x10)
             {
@@ -454,7 +480,7 @@ namespace JCowgill.ZMachine.Core
         protected void InstructionStore(ushort value)
         {
             //Pass to proper storer
-            InstructionStoreVariable(Memory.GetByte(ProgramCounter++), value);
+            InstructionStoreVariable(Memory.GetByte(ProgramCounter++), value, true);
         }
 
         /// <summary>
@@ -619,7 +645,7 @@ namespace JCowgill.ZMachine.Core
             {
                 throw new ArgumentException("snapshot memoy size does not equal the memory size of the processor");
             }
-            
+
             //Restore each part
             snapshot.RestoreStackData(stack);
             snapshot.RestoreMemory(Memory);
