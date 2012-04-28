@@ -538,7 +538,7 @@ namespace JCowgill.ZMachine.Machine
         private void Restart(int argc, ushort[] argv)
         {
             //Restarts the game
-            //TODO restart
+            Finished = FinishType.Restart;
         }
 
         private void RetPopped(int argc, ushort[] argv)
@@ -556,7 +556,7 @@ namespace JCowgill.ZMachine.Machine
         private void Quit(int argc, ushort[] argv)
         {
             //Exit immediately
-            Finished = true;
+            Finished = FinishType.Quit;
         }
 
         private void NewLine(int argc, ushort[] argv)

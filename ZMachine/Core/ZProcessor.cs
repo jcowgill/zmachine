@@ -133,12 +133,9 @@ namespace JCowgill.ZMachine.Core
         public int ProgramCounter { get; protected set; }
 
         /// <summary>
-        /// Marks the program as complete
+        /// Marks the way the program will finish
         /// </summary>
-        /// <remarks>
-        /// When set to true, the Execute method will return after the instruction has returned
-        /// </remarks>
-        public bool Finished { get; protected set; }
+        public FinishType Finished { get; protected set; }
 
         /// <summary>
         /// Creates a new z processor
@@ -262,103 +259,128 @@ namespace JCowgill.ZMachine.Core
             //Do reset
             ProcessorReset();
 
-            //Start decode loop
-            while(!Finished)
+            //Take snapshot for restating
+            ZSnapshot restartSnapshot = CreateSnapshot();
+
+            for(;;)
             {
-                //Get opcode of next instruction
-                opNum = Memory.GetByte(ProgramCounter++);
+                //TODO things after restart here
 
-                //Get arguments
-                if(opNum < 0x80)
+                //Start decode loop
+                while(Finished == FinishType.Running)
                 {
-                    //Long Instruction
-                    args[0] = GetArgument((opNum & 0x40) == 0 ? ArgumentSmall : ArgumentVariable);
-                    args[1] = GetArgument((opNum & 0x20) == 0 ? ArgumentSmall : ArgumentVariable);
-                    argc = 2;
+                    //Get opcode of next instruction
+                    opNum = Memory.GetByte(ProgramCounter++);
 
-                    func = instruction2OP[opNum & 0x1F];
-                }
-                else if(opNum < 0xB0)
-                {
-                    //Short 1OP
-                    args[0] = GetArgument((opNum >> 4) & 3);
-                    argc = 1;
-
-                    func = instruction1OP[opNum & 0xF];
-                }
-                else if(opNum < 0xC0)
-                {
-                    if (opNum == 0xBE)
+                    //Get arguments
+                    if(opNum < 0x80)
                     {
-                        //Extended
-                        // Get function
-                        extendedOp = Memory.GetByte(ProgramCounter++);
-                        func = instructionEXT[extendedOp];
+                        //Long Instruction
+                        args[0] = GetArgument((opNum & 0x40) == 0 ? ArgumentSmall : ArgumentVariable);
+                        args[1] = GetArgument((opNum & 0x20) == 0 ? ArgumentSmall : ArgumentVariable);
+                        argc = 2;
 
-                        // Get variable args
-                        byte argTypes = Memory.GetByte(ProgramCounter++);
-                        argc = LoadMultipleArguments(argTypes, 0, args);
-                    }
-                    else
-                    {
-                        //Short 0OP
-                        argc = 0;
-                        func = instruction0OP[opNum & 0xF];
-                    }
-                }
-                else if(opNum == 0xEC || opNum == 0xFA)
-                {
-                    //Variable call_vs2 and call_vn2 use 8 arguments
-                    byte argTypes1 = Memory.GetByte(ProgramCounter++);
-                    byte argTypes2 = Memory.GetByte(ProgramCounter++);
-
-                    argc = LoadMultipleArguments(argTypes1, 0, args);
-
-                    if(argc == 4)
-                    {
-                        argc = 4 +  LoadMultipleArguments(argTypes2, 4, args);
-                    }
-
-                    func = instructionVAR[opNum & 0x1F];
-                }
-                else
-                {
-                    //Variable instruction
-                    byte argTypes = Memory.GetByte(ProgramCounter++);
-                    argc = LoadMultipleArguments(argTypes, 0, args);
-
-                    //Can be 2OP or VAR
-                    if ((opNum & 0x20) == 0)
-                    {
-                        //2OP
                         func = instruction2OP[opNum & 0x1F];
                     }
+                    else if(opNum < 0xB0)
+                    {
+                        //Short 1OP
+                        args[0] = GetArgument((opNum >> 4) & 3);
+                        argc = 1;
+
+                        func = instruction1OP[opNum & 0xF];
+                    }
+                    else if(opNum < 0xC0)
+                    {
+                        if (opNum == 0xBE)
+                        {
+                            //Extended
+                            // Get function
+                            extendedOp = Memory.GetByte(ProgramCounter++);
+                            func = instructionEXT[extendedOp];
+
+                            // Get variable args
+                            byte argTypes = Memory.GetByte(ProgramCounter++);
+                            argc = LoadMultipleArguments(argTypes, 0, args);
+                        }
+                        else
+                        {
+                            //Short 0OP
+                            argc = 0;
+                            func = instruction0OP[opNum & 0xF];
+                        }
+                    }
+                    else if(opNum == 0xEC || opNum == 0xFA)
+                    {
+                        //Variable call_vs2 and call_vn2 use 8 arguments
+                        byte argTypes1 = Memory.GetByte(ProgramCounter++);
+                        byte argTypes2 = Memory.GetByte(ProgramCounter++);
+
+                        argc = LoadMultipleArguments(argTypes1, 0, args);
+
+                        if(argc == 4)
+                        {
+                            argc = 4 +  LoadMultipleArguments(argTypes2, 4, args);
+                        }
+
+                        func = instructionVAR[opNum & 0x1F];
+                    }
                     else
                     {
-                        //VAR
-                        func = instructionVAR[opNum & 0x1F];
+                        //Variable instruction
+                        byte argTypes = Memory.GetByte(ProgramCounter++);
+                        argc = LoadMultipleArguments(argTypes, 0, args);
+
+                        //Can be 2OP or VAR
+                        if ((opNum & 0x20) == 0)
+                        {
+                            //2OP
+                            func = instruction2OP[opNum & 0x1F];
+                        }
+                        else
+                        {
+                            //VAR
+                            func = instructionVAR[opNum & 0x1F];
+                        }
+                    }
+
+                    //Do call
+                    if(func == null)
+                    {
+                        //Illegal instruction
+                        string message;
+                        if (opNum == 0xBE)
+                        {
+                            message = "illegal extended instruction 0x" + extendedOp.ToString("X2");
+                        }
+                        else
+                        {
+                            message = "illegal instruction 0x" + opNum.ToString("X2");
+                        }
+
+                        throw new ZMachineException(message);
+                    }
+                    else
+                    {
+                        func(argc, args);
                     }
                 }
 
-                //Do call
-                if(func == null)
+                //Quit or restart?
+                if (Finished == FinishType.Restart)
                 {
-                    //Illegal instruction
-                    string message;
-                    if (opNum == 0xBE)
-                    {
-                        message = "illegal extended instruction 0x" + extendedOp.ToString("X2");
-                    }
-                    else
-                    {
-                        message = "illegal instruction 0x" + opNum.ToString("X2");
-                    }
+                    //Restore snapshot but keep flags 2
+                    ushort flags2 = Memory.GetUShort(0x10);
+                    RestoreSnapshot(restartSnapshot);
+                    Memory.SetUShort(0x10, flags2);
 
-                    throw new ZMachineException(message);
+                    //Change back to running
+                    Finished = FinishType.Running;
                 }
                 else
                 {
-                    func(argc, args);
+                    //Quitting
+                    break;
                 }
             }
         }
