@@ -10,5 +10,22 @@ namespace JCowgill.ZMachine.Core
     /// </summary>
     public interface IUserInterface
     {
+        /// <summary>
+        /// Returns the width of the given character (in units) using the current font
+        /// </summary>
+        /// <param name="c">character to test</param>
+        /// <returns>the width of the character in units</returns>
+        int CharWidth(char c);
+
+        /// <summary>
+        /// Prints a character to the screen at the current cursor position
+        /// </summary>
+        /// <param name="c">character to print</param>
+        /// <remarks>
+        /// <para>The cursor should advance to the position after the character which has been printed.
+        /// This MUST correspond with advancing the CharWidth of the given character.</para>
+        /// <para>The cursor must not change y position (must not move to the next line)</para>
+        /// </remarks>
+        void PrintChar(char c);
     }
 }
