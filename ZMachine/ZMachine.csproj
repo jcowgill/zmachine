@@ -44,14 +44,18 @@
   <ItemGroup>
     <Compile Include="Core\DecodeResult.cs" />
     <Compile Include="Core\FinishType.cs" />
+    <Compile Include="Core\FontType.cs" />
     <Compile Include="Core\IUserInterface.cs" />
+    <Compile Include="Core\TextStyle.cs" />
     <Compile Include="Core\ZObjectTree.cs" />
     <Compile Include="Core\MemoryBuffer.cs" />
+    <Compile Include="Core\ZScreen.cs" />
     <Compile Include="Core\ZTextEncoder.cs" />
     <Compile Include="Core\ZInputCharacter.cs" />
     <Compile Include="Core\ZMachineException.cs" />
     <Compile Include="Core\ZProcessor.cs" />
     <Compile Include="Core\ZSnapshot.cs" />
+    <Compile Include="Core\ZWindow.cs" />
     <Compile Include="Machine\MachineV1.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
