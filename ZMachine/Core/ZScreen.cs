@@ -94,6 +94,16 @@ namespace JCowgill.ZMachine.Core
             }
         }
 
+        public void Print(string str)
+        {
+            //
+        }
+
+        public void UpdateStatusLine()
+        {
+            //
+        }
+
         /// <summary>
         /// Flushes the buffer of the current window
         /// </summary>

@@ -27,5 +27,12 @@ namespace JCowgill.ZMachine.Core
         /// <para>The cursor must not change y position (must not move to the next line)</para>
         /// </remarks>
         void PrintChar(char c);
+
+        /// <summary>
+        /// Sets the cursor position (in units)
+        /// </summary>
+        /// <param name="x">x position in units (left = 0)</param>
+        /// <param name="y">y position in units (top = 0)</param>
+        void SetCursor(int x, int y);
     }
 }

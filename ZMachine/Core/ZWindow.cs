@@ -33,6 +33,12 @@ namespace JCowgill.ZMachine.Core
         private int my_foreground;
         private int my_background;
 
+        //Attributes
+        private bool my_scrolling;
+        private bool my_wraping;
+        private bool my_buffering;
+        private bool my_transcript;
+
         /// <summary>
         /// Creates a new window
         /// </summary>
@@ -242,11 +248,42 @@ namespace JCowgill.ZMachine.Core
             set { Flush(); my_background = value; }
         }
 
+        /// <summary>True if text is wrapped when it reaches the end of a line</summary>
+        public bool Wrapping
+        {
+            get { return my_wraping; }
+            set { Flush(); my_wraping = value; }
+        }
+
+        /// <summary>True if text scrolls when it reaches the bottom of the window</summary>
+        public bool Scrolling
+        {
+            get { return my_scrolling; }
+            set { Flush(); my_scrolling = value; }
+        }
+
+        /// <summary>True if text is buffered</summary>
+        public bool Buffering
+        {
+            get { return my_buffering; }
+            set { Flush(); my_buffering = value; }
+        }
+
+        // TODO transcript
+        /// <summary>True if text printed to this window is copied to the transcript</summary>
+        public bool Transcript
+        {
+            get { return my_transcript; }
+            set { Flush(); my_transcript = value; }
+        }
+
         /// <summary>
         /// Resets the cursor to its initial position
         /// </summary>
         private void ResetCursor()
         {
+            //Reset to bottom left
+            my_xCursor = LeftMargin;
         }
 
         /// <summary>
