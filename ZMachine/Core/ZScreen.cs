@@ -12,6 +12,8 @@ namespace JCowgill.ZMachine.Core
     {
         private readonly ZWindow[] windows;
         private readonly IUserInterface ui;
+
+        private string buffer = string.Empty;
         private int currentWindow;
 
         /// <summary>
@@ -94,14 +96,135 @@ namespace JCowgill.ZMachine.Core
             }
         }
 
-        public void Print(string str)
+        /// <summary>
+        /// Prints a new line
+        /// </summary>
+        private void PrintNewLine()
         {
-            //
+            //TODO print new line and do scrolling etc
         }
 
-        public void UpdateStatusLine()
+        /// <summary>
+        /// Gets the number of units left on the current line in the given window
+        /// </summary>
+        /// <param name="wnd">window to test</param>
+        /// <returns>number of units left</returns>
+        private int UnitsLeft(ZWindow wnd)
         {
-            //
+            return Math.Max(wnd.Width - wnd.RightMargin - wnd.XCursor, 0);
+        }
+
+        /// <summary>
+        /// Prints a word (string where whitespace is not interpreted)
+        /// </summary>
+        /// <param name="word">word to print</param>
+        /// <param name="width">word width</param>
+        private void PrintWord(string word, int width)
+        {
+            //Get printing width and units left
+            int unitsLeft = UnitsLeft(CurrentWindow);
+
+            //Enough space?
+            if (width >= unitsLeft)
+            {
+                //Print word
+                ui.PrintString(word);
+
+                //Advance cursor
+                //TODO do not update os cursor
+                CurrentWindow.XCursor += width;
+            }
+            else if (width == unitsLeft)
+            {
+                //Print word
+                ui.PrintString(word);
+
+                //New line
+                PrintNewLine();
+            }
+            else
+            {
+                //At the start of a line?
+                if(CurrentWindow.XCursor == CurrentWindow.LeftMargin)
+                {
+                    //Yes, do character wrapping
+                }
+                else
+                {
+                    //Do new line first and then print word recursivly
+                    PrintNewLine();
+                    PrintWord(word, width);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Prints a string to the current window
+        /// </summary>
+        /// <param name="str">string to print</param>
+        public void Print(string str)
+        {
+            string myBuffer = buffer;
+
+            //Find whitespace in the string
+            int wordStart = -1;
+                //-1 wordStart means the work starts in the buffer
+
+            for (int i = 0; i < str.Length; i++)
+            {
+                //Whitespace?
+                if (Char.IsWhiteSpace(str, i))
+                {
+                    //New line?
+                    if (str[i] == '\n')
+                    {
+                        //Do new line
+                        PrintNewLine();
+                    }
+                    else
+                    {
+                        //Get word
+                        string word;
+                        if (wordStart == -1)
+                            word = myBuffer + str.Substring(0, i);
+                        else
+                            word = str.Substring(wordStart, wordStart - i);
+
+                        //Print word
+                        PrintWord(word, ui.StringWidth(word));
+
+                        //Print space
+                        if (CurrentWindow.XCursor != CurrentWindow.LeftMargin)
+                        {
+                            //TODO could this cause a new line needlessly?
+                            string spaceStr = new string(str[i], 1);
+                            PrintWord(spaceStr, ui.StringWidth(spaceStr));
+                        }
+                    }
+                }
+            }
+
+            //Place all unhandled characters in the buffer
+            if (wordStart == -1)
+            {
+                //Add everything
+                buffer += str;
+            }
+            else
+            {
+                //Add the rest of the string
+                buffer = str.Substring(wordStart);
+            }
+        }
+
+        /// <summary>
+        /// Prints a string and a new line the current window
+        /// </summary>
+        /// <param name="str">string to print</param>
+        public void PrintLine(string str)
+        {
+            Print(str);
+            PrintNewLine();
         }
 
         /// <summary>
