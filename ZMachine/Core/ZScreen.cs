@@ -125,7 +125,7 @@ namespace JCowgill.ZMachine.Core
             int unitsLeft = UnitsLeft(CurrentWindow);
 
             //Enough space?
-            if (width >= unitsLeft)
+            if (width < unitsLeft)
             {
                 //Print word
                 ui.PrintString(word);
@@ -147,7 +147,26 @@ namespace JCowgill.ZMachine.Core
                 //At the start of a line?
                 if(CurrentWindow.XCursor == CurrentWindow.LeftMargin)
                 {
-                    //Yes, do character wrapping
+                    //Yes, do character wrapping on line boundary
+                    int estCharsPerLine = Math.Max((word.Length * width) / unitsLeft, 1);
+                    
+                    do
+                    {
+                        //Calculate the max number of characters that will fit on this line
+                        string toPrint;
+                        
+                        for(;;)
+                        {
+                        }
+                        
+                        //TODO what if the window is so small, nothing can be printed?
+                        
+                        //Print string and remove from the amount left todo
+                        ui.PrintString(toPrint);
+                        PrintNewLine();
+                        word = word.SubString(toPrint.Length);
+                    }
+                    while(word.Length > 0);
                 }
                 else
                 {
